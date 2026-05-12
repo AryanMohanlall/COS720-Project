@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 
 import joblib
+import optuna
+import pandas as pd
 from lightgbm import LGBMClassifier
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.metrics import (
@@ -14,14 +16,18 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
 from xgboost import XGBClassifier
 
+optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 BASE_DIR = Path(__file__).resolve().parent
 DATASET_PATH = BASE_DIR / "data" / "insider_threat_clean_dataset.csv"
 RF_METRICS_PATH = BASE_DIR / "reports" / "random_forest_metrics.json"
 TARGET_COLUMN = "is_malicious"
+
+N_TRIALS = 50
+CV_FOLDS = 5
 
 NUMERIC_COLUMNS = {
     "employee_seniority_years",
@@ -114,6 +120,59 @@ def save_model_and_report(model, vectorizer, constant_columns, metrics_extra, mo
         json.dump(metrics_extra, handle, indent=2)
 
 
+def tune_xgboost(X_train, y_train, scale_pos_weight: float) -> dict:
+    cv = StratifiedKFold(n_splits=CV_FOLDS, shuffle=True, random_state=42)
+
+    def objective(trial: optuna.Trial) -> float:
+        params = {
+            "n_estimators": trial.suggest_int("n_estimators", 100, 600),
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
+            "max_depth": trial.suggest_int("max_depth", 3, 10),
+            "subsample": trial.suggest_float("subsample", 0.5, 1.0),
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
+            "min_child_weight": trial.suggest_int("min_child_weight", 1, 10),
+            "gamma": trial.suggest_float("gamma", 0.0, 5.0),
+            "scale_pos_weight": scale_pos_weight,
+            "random_state": 42,
+            "n_jobs": -1,
+            "eval_metric": "aucpr",
+            "verbosity": 0,
+        }
+        model = XGBClassifier(**params)
+        scores = cross_val_score(model, X_train, y_train, cv=cv, scoring="average_precision", n_jobs=1)
+        return scores.mean()
+
+    study = optuna.create_study(direction="maximize")
+    study.optimize(objective, n_trials=N_TRIALS, show_progress_bar=True)
+    return study.best_params
+
+
+def tune_lightgbm(X_train, y_train) -> dict:
+    cv = StratifiedKFold(n_splits=CV_FOLDS, shuffle=True, random_state=42)
+
+    def objective(trial: optuna.Trial) -> float:
+        params = {
+            "n_estimators": trial.suggest_int("n_estimators", 100, 600),
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
+            "num_leaves": trial.suggest_int("num_leaves", 20, 150),
+            "max_depth": trial.suggest_int("max_depth", 3, 10),
+            "subsample": trial.suggest_float("subsample", 0.5, 1.0),
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
+            "min_child_samples": trial.suggest_int("min_child_samples", 5, 50),
+            "is_unbalance": True,
+            "random_state": 42,
+            "n_jobs": -1,
+            "verbose": -1,
+        }
+        model = LGBMClassifier(**params)
+        scores = cross_val_score(model, X_train, y_train, cv=cv, scoring="average_precision", n_jobs=1)
+        return scores.mean()
+
+    study = optuna.create_study(direction="maximize")
+    study.optimize(objective, n_trials=N_TRIALS, show_progress_bar=True)
+    return study.best_params
+
+
 def main():
     if not DATASET_PATH.exists():
         raise FileNotFoundError(f"Dataset not found: {DATASET_PATH}")
@@ -129,12 +188,12 @@ def main():
     )
 
     vectorizer = DictVectorizer(sparse=False)
-    X_train = vectorizer.fit_transform(X_train_raw)
-    X_test = vectorizer.transform(X_test_raw)
+    X_train = pd.DataFrame(vectorizer.fit_transform(X_train_raw), columns=vectorizer.get_feature_names_out())
+    X_test = pd.DataFrame(vectorizer.transform(X_test_raw), columns=vectorizer.get_feature_names_out())
 
     neg = sum(1 for y in y_train if y == 0)
     pos = sum(1 for y in y_train if y == 1)
-    scale_pos_weight = neg / pos  # ~17.6 for this dataset
+    scale_pos_weight = neg / pos
 
     shared_meta = {
         "dataset_path": str(DATASET_PATH),
@@ -149,11 +208,13 @@ def main():
     # ------------------------------------------------------------------
     # XGBoost
     # ------------------------------------------------------------------
-    print("Training XGBoost...")
+    print(f"\nTuning XGBoost ({N_TRIALS} Optuna trials, {CV_FOLDS}-fold CV)...")
+    xgb_best_params = tune_xgboost(X_train, y_train, scale_pos_weight)
+    print(f"Best XGBoost params: {xgb_best_params}")
+
+    print("Training XGBoost with best params...")
     xgb_model = XGBClassifier(
-        n_estimators=300,
-        learning_rate=0.05,
-        max_depth=6,
+        **xgb_best_params,
         scale_pos_weight=scale_pos_weight,
         random_state=42,
         n_jobs=-1,
@@ -167,7 +228,7 @@ def main():
 
     save_model_and_report(
         xgb_model, vectorizer, constant_columns,
-        {**shared_meta, **xgb_metrics},
+        {**shared_meta, **xgb_metrics, "best_params": xgb_best_params},
         BASE_DIR / "models" / "xgboost_model.joblib",
         BASE_DIR / "reports" / "xgboost_metrics.json",
     )
@@ -181,10 +242,13 @@ def main():
     # ------------------------------------------------------------------
     # LightGBM
     # ------------------------------------------------------------------
-    print("Training LightGBM...")
+    print(f"\nTuning LightGBM ({N_TRIALS} Optuna trials, {CV_FOLDS}-fold CV)...")
+    lgbm_best_params = tune_lightgbm(X_train, y_train)
+    print(f"Best LightGBM params: {lgbm_best_params}")
+
+    print("Training LightGBM with best params...")
     lgbm_model = LGBMClassifier(
-        n_estimators=300,
-        learning_rate=0.05,
+        **lgbm_best_params,
         is_unbalance=True,
         random_state=42,
         n_jobs=-1,
@@ -197,7 +261,7 @@ def main():
 
     save_model_and_report(
         lgbm_model, vectorizer, constant_columns,
-        {**shared_meta, **lgbm_metrics},
+        {**shared_meta, **lgbm_metrics, "best_params": lgbm_best_params},
         BASE_DIR / "models" / "lightgbm_model.joblib",
         BASE_DIR / "reports" / "lightgbm_metrics.json",
     )

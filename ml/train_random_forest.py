@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 import joblib
+import optuna
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.metrics import (
@@ -14,8 +15,9 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
 
+optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 BASE_DIR = Path(__file__).resolve().parent
 DATASET_PATH = BASE_DIR / "data" / "insider_threat_clean_dataset.csv"
@@ -23,7 +25,9 @@ MODEL_OUTPUT_PATH = BASE_DIR / "models" / "random_forest_model.joblib"
 REPORT_OUTPUT_PATH = BASE_DIR / "reports" / "random_forest_metrics.json"
 TARGET_COLUMN = "is_malicious"
 
-# Numeric columns should remain numeric instead of being one-hot encoded as text.
+N_TRIALS = 50
+CV_FOLDS = 5
+
 NUMERIC_COLUMNS = {
     "employee_seniority_years",
     "is_contractor",
@@ -91,6 +95,29 @@ def load_dataset(dataset_path: Path):
     return features, labels, sorted(constant_columns)
 
 
+def tune_random_forest(X_train, y_train) -> dict:
+    cv = StratifiedKFold(n_splits=CV_FOLDS, shuffle=True, random_state=42)
+
+    def objective(trial: optuna.Trial) -> float:
+        params = {
+            "n_estimators": trial.suggest_int("n_estimators", 100, 600),
+            "max_depth": trial.suggest_int("max_depth", 3, 30),
+            "min_samples_split": trial.suggest_int("min_samples_split", 2, 20),
+            "min_samples_leaf": trial.suggest_int("min_samples_leaf", 1, 20),
+            "max_features": trial.suggest_categorical("max_features", ["sqrt", "log2", None]),
+            "class_weight": "balanced_subsample",
+            "random_state": 42,
+            "n_jobs": 1,
+        }
+        model = RandomForestClassifier(**params)
+        scores = cross_val_score(model, X_train, y_train, cv=cv, scoring="average_precision", n_jobs=1)
+        return scores.mean()
+
+    study = optuna.create_study(direction="maximize")
+    study.optimize(objective, n_trials=N_TRIALS, show_progress_bar=True)
+    return study.best_params
+
+
 def main():
     if not DATASET_PATH.exists():
         raise FileNotFoundError(f"Dataset not found: {DATASET_PATH}")
@@ -109,12 +136,16 @@ def main():
     X_train = vectorizer.fit_transform(X_train_raw)
     X_test = vectorizer.transform(X_test_raw)
 
+    print(f"\nTuning Random Forest ({N_TRIALS} Optuna trials, {CV_FOLDS}-fold CV)...")
+    best_params = tune_random_forest(X_train, y_train)
+    print(f"Best Random Forest params: {best_params}")
+
+    print("Training Random Forest with best params...")
     model = RandomForestClassifier(
-        n_estimators=300,
-        random_state=42,
-        n_jobs=1,
+        **best_params,
         class_weight="balanced_subsample",
-        min_samples_leaf=2,
+        random_state=42,
+        n_jobs=-1,
     )
     model.fit(X_train, y_train)
 
@@ -129,6 +160,7 @@ def main():
         "dropped_constant_columns": constant_columns,
         "positive_rate_train": sum(y_train) / len(y_train),
         "positive_rate_test": sum(y_test) / len(y_test),
+        "best_params": best_params,
         "roc_auc": roc_auc_score(y_test, probabilities),
         "pr_auc": average_precision_score(y_test, probabilities),
         "precision": precision_score(y_test, predictions, zero_division=0),
@@ -153,20 +185,15 @@ def main():
     with REPORT_OUTPUT_PATH.open("w", encoding="utf-8") as handle:
         json.dump(metrics, handle, indent=2)
 
-    print("Random Forest training complete.")
+    print("\nRandom Forest training complete.")
     print(f"Train rows: {metrics['train_rows']}")
     print(f"Test rows: {metrics['test_rows']}")
     print(f"Encoded feature count: {metrics['feature_count_after_encoding']}")
     print(f"Dropped constant columns: {constant_columns or 'None'}")
-    print(
-        classification_report(
-            y_test,
-            predictions,
-            digits=4,
-            zero_division=0,
-            target_names=["not_malicious", "malicious"],
-        )
-    )
+    print(classification_report(
+        y_test, predictions, digits=4, zero_division=0,
+        target_names=["not_malicious", "malicious"],
+    ))
     print(f"ROC-AUC: {metrics['roc_auc']:.4f}")
     print(f"PR-AUC: {metrics['pr_auc']:.4f}")
     print(f"Model saved to: {MODEL_OUTPUT_PATH}")
