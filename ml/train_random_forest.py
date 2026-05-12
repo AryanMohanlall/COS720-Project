@@ -1,3 +1,4 @@
+import argparse
 import csv
 import json
 from pathlib import Path
@@ -23,6 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DATASET_PATH = BASE_DIR / "data" / "insider_threat_clean_dataset.csv"
 MODEL_OUTPUT_PATH = BASE_DIR / "models" / "random_forest_model.joblib"
 REPORT_OUTPUT_PATH = BASE_DIR / "reports" / "random_forest_metrics.json"
+BEST_PARAMS_PATH = BASE_DIR / "reports" / "best_params.json"
 TARGET_COLUMN = "is_malicious"
 
 N_TRIALS = 50
@@ -95,6 +97,14 @@ def load_dataset(dataset_path: Path):
     return features, labels, sorted(constant_columns)
 
 
+def load_best_params(params_path: Path) -> dict | None:
+    if not params_path.exists():
+        return None
+    with params_path.open(encoding="utf-8") as f:
+        data = json.load(f)
+    return data.get("random_forest", {}).get("best_params")
+
+
 def tune_random_forest(X_train, y_train) -> dict:
     cv = StratifiedKFold(n_splits=CV_FOLDS, shuffle=True, random_state=42)
 
@@ -119,6 +129,16 @@ def tune_random_forest(X_train, y_train) -> dict:
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Train Random Forest classifier")
+    parser.add_argument(
+        "--params",
+        type=Path,
+        default=BEST_PARAMS_PATH,
+        metavar="PATH",
+        help="Path to best_params.json produced by tune_hyperparameters.py (default: reports/best_params.json)",
+    )
+    args = parser.parse_args()
+
     if not DATASET_PATH.exists():
         raise FileNotFoundError(f"Dataset not found: {DATASET_PATH}")
 
@@ -136,9 +156,14 @@ def main():
     X_train = vectorizer.fit_transform(X_train_raw)
     X_test = vectorizer.transform(X_test_raw)
 
-    print(f"\nTuning Random Forest ({N_TRIALS} Optuna trials, {CV_FOLDS}-fold CV)...")
-    best_params = tune_random_forest(X_train, y_train)
-    print(f"Best Random Forest params: {best_params}")
+    best_params = load_best_params(args.params)
+    if best_params is not None:
+        print(f"\nLoaded pre-tuned Random Forest params from {args.params}")
+        print(f"Params: {best_params}")
+    else:
+        print(f"\nTuning Random Forest ({N_TRIALS} Optuna trials, {CV_FOLDS}-fold CV)...")
+        best_params = tune_random_forest(X_train, y_train)
+        print(f"Best Random Forest params: {best_params}")
 
     print("Training Random Forest with best params...")
     model = RandomForestClassifier(

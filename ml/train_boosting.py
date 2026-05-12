@@ -1,3 +1,4 @@
+import argparse
 import csv
 import json
 from pathlib import Path
@@ -24,6 +25,7 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 BASE_DIR = Path(__file__).resolve().parent
 DATASET_PATH = BASE_DIR / "data" / "insider_threat_clean_dataset.csv"
 RF_METRICS_PATH = BASE_DIR / "reports" / "random_forest_metrics.json"
+BEST_PARAMS_PATH = BASE_DIR / "reports" / "best_params.json"
 TARGET_COLUMN = "is_malicious"
 
 N_TRIALS = 50
@@ -90,6 +92,14 @@ def load_dataset(dataset_path: Path):
                 feature_row.pop(col, None)
 
     return features, labels, sorted(constant_columns)
+
+
+def load_best_params(params_path: Path, model_key: str) -> dict | None:
+    if not params_path.exists():
+        return None
+    with params_path.open(encoding="utf-8") as f:
+        data = json.load(f)
+    return data.get(model_key, {}).get("best_params")
 
 
 def compute_metrics(y_test, predictions, probabilities):
@@ -174,6 +184,16 @@ def tune_lightgbm(X_train, y_train) -> dict:
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Train XGBoost and LightGBM classifiers")
+    parser.add_argument(
+        "--params",
+        type=Path,
+        default=BEST_PARAMS_PATH,
+        metavar="PATH",
+        help="Path to best_params.json produced by tune_hyperparameters.py (default: reports/best_params.json)",
+    )
+    args = parser.parse_args()
+
     if not DATASET_PATH.exists():
         raise FileNotFoundError(f"Dataset not found: {DATASET_PATH}")
 
@@ -208,9 +228,14 @@ def main():
     # ------------------------------------------------------------------
     # XGBoost
     # ------------------------------------------------------------------
-    print(f"\nTuning XGBoost ({N_TRIALS} Optuna trials, {CV_FOLDS}-fold CV)...")
-    xgb_best_params = tune_xgboost(X_train, y_train, scale_pos_weight)
-    print(f"Best XGBoost params: {xgb_best_params}")
+    xgb_best_params = load_best_params(args.params, "xgboost")
+    if xgb_best_params is not None:
+        print(f"\nLoaded pre-tuned XGBoost params from {args.params}")
+        print(f"Params: {xgb_best_params}")
+    else:
+        print(f"\nTuning XGBoost ({N_TRIALS} Optuna trials, {CV_FOLDS}-fold CV)...")
+        xgb_best_params = tune_xgboost(X_train, y_train, scale_pos_weight)
+        print(f"Best XGBoost params: {xgb_best_params}")
 
     print("Training XGBoost with best params...")
     xgb_model = XGBClassifier(
@@ -242,9 +267,14 @@ def main():
     # ------------------------------------------------------------------
     # LightGBM
     # ------------------------------------------------------------------
-    print(f"\nTuning LightGBM ({N_TRIALS} Optuna trials, {CV_FOLDS}-fold CV)...")
-    lgbm_best_params = tune_lightgbm(X_train, y_train)
-    print(f"Best LightGBM params: {lgbm_best_params}")
+    lgbm_best_params = load_best_params(args.params, "lightgbm")
+    if lgbm_best_params is not None:
+        print(f"\nLoaded pre-tuned LightGBM params from {args.params}")
+        print(f"Params: {lgbm_best_params}")
+    else:
+        print(f"\nTuning LightGBM ({N_TRIALS} Optuna trials, {CV_FOLDS}-fold CV)...")
+        lgbm_best_params = tune_lightgbm(X_train, y_train)
+        print(f"Best LightGBM params: {lgbm_best_params}")
 
     print("Training LightGBM with best params...")
     lgbm_model = LGBMClassifier(
