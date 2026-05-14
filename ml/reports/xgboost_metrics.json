@@ -1,0 +1,35 @@
+{
+  "dataset_path": "C:\\Users\\Aryan\\Documents\\Personal\\COS720-Project\\ml\\data\\insider_threat_clean_dataset.csv",
+  "train_rows": 94891,
+  "test_rows": 23723,
+  "feature_count_after_encoding": 110,
+  "dropped_constant_columns": [
+    "late_exit_flag"
+  ],
+  "positive_rate_train": 0.05384072251319935,
+  "positive_rate_test": 0.05382961682755132,
+  "roc_auc": 0.9863201135435391,
+  "pr_auc": 0.8551736418517989,
+  "precision": 0.6513713080168776,
+  "recall": 0.9671104150352389,
+  "f1": 0.7784431137724551,
+  "confusion_matrix": [
+    [
+      21785,
+      661
+    ],
+    [
+      42,
+      1235
+    ]
+  ],
+  "best_params": {
+    "n_estimators": 543,
+    "learning_rate": 0.12143525959204186,
+    "max_depth": 7,
+    "subsample": 0.847865409046206,
+    "colsample_bytree": 0.8520035320826468,
+    "min_child_weight": 4,
+    "gamma": 2.6397185102943337
+  }
+}

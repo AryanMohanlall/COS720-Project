@@ -26,6 +26,7 @@ TARGET_COLUMN = "is_malicious"
 
 N_TRIALS = 50
 CV_FOLDS = 5
+RF_TUNING_SAMPLE_SIZE = 30000
 
 NUMERIC_COLUMNS = {
     "employee_seniority_years",
@@ -149,7 +150,8 @@ def tune_random_forest(X_train: pd.DataFrame, y_train) -> tuple[dict, float]:
             "max_features": trial.suggest_categorical("max_features", ["sqrt", "log2", None]),
             "class_weight": "balanced_subsample",
             "random_state": 42,
-            "n_jobs": 1,
+            # Parallelize tree building inside each fit and keep CV serial to avoid nested oversubscription.
+            "n_jobs": -1,
         }
         scores = cross_val_score(RandomForestClassifier(**params), X_train, y_train, cv=cv, scoring="average_precision", n_jobs=1)
         return scores.mean()
@@ -181,6 +183,21 @@ def main():
     scale_pos_weight = neg / pos
 
     results = {}
+    X_train_rf = X_train
+    y_train_rf = y_train
+
+    if RF_TUNING_SAMPLE_SIZE and RF_TUNING_SAMPLE_SIZE < len(y_train):
+        X_train_rf, _, y_train_rf, _ = train_test_split(
+            X_train,
+            y_train,
+            train_size=RF_TUNING_SAMPLE_SIZE,
+            random_state=42,
+            stratify=y_train,
+        )
+        print(
+            f"Random Forest tuning will use a stratified subsample of "
+            f"{len(y_train_rf):,} rows out of {len(y_train):,} training rows."
+        )
 
     print(f"\nTuning XGBoost ({N_TRIALS} trials, {CV_FOLDS}-fold CV)...")
     xgb_params, xgb_score = tune_xgboost(X_train, y_train, scale_pos_weight)
@@ -195,7 +212,7 @@ def main():
     print(f"  Params: {lgbm_params}")
 
     print(f"\nTuning Random Forest ({N_TRIALS} trials, {CV_FOLDS}-fold CV)...")
-    rf_params, rf_score = tune_random_forest(X_train, y_train)
+    rf_params, rf_score = tune_random_forest(X_train_rf, y_train_rf)
     results["random_forest"] = {"best_params": rf_params, "cv_pr_auc": round(rf_score, 6)}
     print(f"  Best CV PR-AUC: {rf_score:.4f}")
     print(f"  Params: {rf_params}")
