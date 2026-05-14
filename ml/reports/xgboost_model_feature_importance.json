@@ -1,0 +1,63 @@
+{
+  "dataset_path": "C:\\Users\\Aryan\\Documents\\Personal\\COS720-Project\\ml\\data\\insider_threat_clean_dataset.csv",
+  "model_path": "C:\\Users\\Aryan\\Documents\\Personal\\COS720-Project\\ml\\models\\xgboost_model.joblib",
+  "test_rows": 23723,
+  "decision_threshold": 0.024006980750709773,
+  "repeats": 1,
+  "seed": 42,
+  "limit_features": 2,
+  "dropped_constant_columns": [
+    "late_exit_flag"
+  ],
+  "baseline_metrics": {
+    "decision_threshold": 0.024006980750709773,
+    "roc_auc": 0.9873972483930982,
+    "pr_auc": 0.8571417470562083,
+    "precision": 0.30052306229196385,
+    "recall": 0.9898198903680501,
+    "f1": 0.4610614627028999,
+    "false_positives": 2942,
+    "false_negatives": 13,
+    "true_positives": 1264,
+    "true_negatives": 19504
+  },
+  "raw_feature_count": 20,
+  "feature_importance": [
+    {
+      "feature": "employee_campus",
+      "encoded_column_count": 3,
+      "encoded_columns": [
+        "employee_campus=Campus A",
+        "employee_campus=Campus B",
+        "employee_campus=Campus C"
+      ],
+      "false_negative_increase_mean": 5.0,
+      "false_negative_increase_std": 0.0,
+      "recall_drop_mean": 0.003915426781519127,
+      "recall_drop_std": 0.0,
+      "pr_auc_drop_mean": 0.0425072566656588,
+      "pr_auc_drop_std": 0.0,
+      "precision_drop_mean": 0.027657869400763146,
+      "precision_drop_std": 0.0,
+      "f1_drop_mean": 0.03362978726579241,
+      "f1_drop_std": 0.0
+    },
+    {
+      "feature": "burned_from_other",
+      "encoded_column_count": 1,
+      "encoded_columns": [
+        "burned_from_other"
+      ],
+      "false_negative_increase_mean": 0.0,
+      "false_negative_increase_std": 0.0,
+      "recall_drop_mean": 0.0,
+      "recall_drop_std": 0.0,
+      "pr_auc_drop_mean": -0.0011283530040178125,
+      "pr_auc_drop_std": 0.0,
+      "precision_drop_mean": 0.002057891099519926,
+      "precision_drop_std": 0.0,
+      "f1_drop_mean": 0.002425758784177112,
+      "f1_drop_std": 0.0
+    }
+  ]
+}
