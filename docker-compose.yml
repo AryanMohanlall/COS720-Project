@@ -6,6 +6,8 @@ services:
       - "8000:8000"
     environment:
       - ENVIRONMENT=production
+    volumes:
+      - ./artifacts:/app/artifacts:ro
 
   frontend:
     build:

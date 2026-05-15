@@ -3,7 +3,7 @@
 This folder contains:
 
 - `data/` for datasets
-- `models/` for trained model artifacts
+- `models/` for local trained model copies
 - `reports/` for evaluation output
 - `train_random_forest.py` for Random Forest training
 
@@ -22,6 +22,12 @@ python ml\train_random_forest.py
 python ml\train_boosting.py --target-recall 0.99
 python ml\feature_importance.py --model ml\models\xgboost_model.joblib --repeats 5
 ```
+
+Training also writes backend-ready artifacts to `artifacts/models/`:
+
+- `artifacts/models/random_forest_model.joblib`
+- `artifacts/models/xgboost_model.joblib`
+- `artifacts/models/lightgbm_model.joblib`
 
 `--target-recall` tunes the decision threshold from out-of-fold training predictions before the final test evaluation. Lower thresholds usually catch more insiders but will raise false positives.
 

@@ -22,8 +22,10 @@ from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 BASE_DIR = Path(__file__).resolve().parent
+REPO_ROOT = BASE_DIR.parent
 DATASET_PATH = BASE_DIR / "data" / "insider_threat_clean_dataset.csv"
 MODEL_OUTPUT_PATH = BASE_DIR / "models" / "random_forest_model.joblib"
+ARTIFACT_MODEL_OUTPUT_PATH = REPO_ROOT / "artifacts" / "models" / "random_forest_model.joblib"
 REPORT_OUTPUT_PATH = BASE_DIR / "reports" / "random_forest_metrics.json"
 BEST_PARAMS_PATH = BASE_DIR / "reports" / "best_params.json"
 TARGET_COLUMN = "is_malicious"
@@ -202,6 +204,12 @@ def build_report_thresholds(selected_threshold: float) -> list[float]:
     return sorted(min(1.0, max(0.0, threshold)) for threshold in thresholds)
 
 
+def save_model_artifact(payload: dict, *paths: Path) -> None:
+    for path in paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(payload, path)
+
+
 def generate_oof_probabilities(feature_rows, labels, model_builder) -> np.ndarray:
     cv = StratifiedKFold(n_splits=CV_FOLDS, shuffle=True, random_state=42)
     labels_array = np.asarray(labels)
@@ -342,18 +350,21 @@ def main():
         },
     }
 
-    MODEL_OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     REPORT_OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-    joblib.dump(
-        {
-            "model": model,
-            "vectorizer": vectorizer,
-            "target_column": TARGET_COLUMN,
-            "constant_columns": constant_columns,
-            "decision_threshold": metrics["decision_threshold"],
-        },
+    model_artifact = {
+        "model": model,
+        "vectorizer": vectorizer,
+        "target_column": TARGET_COLUMN,
+        "constant_columns": constant_columns,
+        "decision_threshold": metrics["decision_threshold"],
+        "model_name": "random_forest",
+        "numeric_columns": sorted(NUMERIC_COLUMNS),
+    }
+    save_model_artifact(
+        model_artifact,
         MODEL_OUTPUT_PATH,
+        ARTIFACT_MODEL_OUTPUT_PATH,
     )
 
     with REPORT_OUTPUT_PATH.open("w", encoding="utf-8") as handle:
@@ -373,6 +384,7 @@ def main():
     print(f"ROC-AUC: {metrics['roc_auc']:.4f}")
     print(f"PR-AUC: {metrics['pr_auc']:.4f}")
     print(f"Model saved to: {MODEL_OUTPUT_PATH}")
+    print(f"Backend artifact saved to: {ARTIFACT_MODEL_OUTPUT_PATH}")
     print(f"Metrics saved to: {REPORT_OUTPUT_PATH}")
 
 

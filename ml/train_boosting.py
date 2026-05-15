@@ -23,6 +23,7 @@ from xgboost import XGBClassifier
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 BASE_DIR = Path(__file__).resolve().parent
+REPO_ROOT = BASE_DIR.parent
 DATASET_PATH = BASE_DIR / "data" / "insider_threat_clean_dataset.csv"
 RF_METRICS_PATH = BASE_DIR / "reports" / "random_forest_metrics.json"
 BEST_PARAMS_PATH = BASE_DIR / "reports" / "best_params.json"
@@ -205,22 +206,37 @@ def generate_oof_probabilities(feature_rows, labels, model_builder) -> np.ndarra
     return probabilities
 
 
-def save_model_and_report(model, vectorizer, constant_columns, decision_threshold, metrics_extra, model_path, report_path):
+def save_model_and_report(
+    model,
+    vectorizer,
+    constant_columns,
+    decision_threshold,
+    metrics_extra,
+    model_path,
+    report_path,
+    model_name,
+):
     model_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact_path = REPO_ROOT / "artifacts" / "models" / model_path.name
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
 
-    joblib.dump(
-        {
-            "model": model,
-            "vectorizer": vectorizer,
-            "target_column": TARGET_COLUMN,
-            "constant_columns": constant_columns,
-            "decision_threshold": float(decision_threshold),
-        },
-        model_path,
-    )
+    artifact = {
+        "model": model,
+        "vectorizer": vectorizer,
+        "target_column": TARGET_COLUMN,
+        "constant_columns": constant_columns,
+        "decision_threshold": float(decision_threshold),
+        "model_name": model_name,
+        "numeric_columns": sorted(NUMERIC_COLUMNS),
+    }
+    joblib.dump(artifact, model_path)
+    joblib.dump(artifact, artifact_path)
+
     with report_path.open("w", encoding="utf-8") as handle:
         json.dump(metrics_extra, handle, indent=2)
+
+    return artifact_path
 
 
 def format_metric_value(metric: str, value) -> str:
@@ -396,7 +412,7 @@ def main():
     xgb_preds = (xgb_probs >= xgb_metrics["decision_threshold"]).astype(int)
     xgb_default_metrics = compute_probability_metrics(y_test, xgb_probs, 0.5)
 
-    save_model_and_report(
+    xgb_artifact_path = save_model_and_report(
         xgb_model,
         vectorizer,
         constant_columns,
@@ -425,6 +441,7 @@ def main():
         },
         BASE_DIR / "models" / "xgboost_model.joblib",
         BASE_DIR / "reports" / "xgboost_metrics.json",
+        "xgboost",
     )
 
     print("\nXGBoost classification report (selected threshold):")
@@ -488,7 +505,7 @@ def main():
     lgbm_preds = (lgbm_probs >= lgbm_metrics["decision_threshold"]).astype(int)
     lgbm_default_metrics = compute_probability_metrics(y_test, lgbm_probs, 0.5)
 
-    save_model_and_report(
+    lgbm_artifact_path = save_model_and_report(
         lgbm_model,
         vectorizer,
         constant_columns,
@@ -517,6 +534,7 @@ def main():
         },
         BASE_DIR / "models" / "lightgbm_model.joblib",
         BASE_DIR / "reports" / "lightgbm_metrics.json",
+        "lightgbm",
     )
 
     print("\nLightGBM classification report (selected threshold):")
@@ -566,6 +584,8 @@ def main():
     print("=" * 65)
     print(f"\nXGBoost model  -> models/xgboost_model.joblib")
     print(f"LightGBM model -> models/lightgbm_model.joblib")
+    print(f"XGBoost backend artifact  -> {xgb_artifact_path}")
+    print(f"LightGBM backend artifact -> {lgbm_artifact_path}")
 
 
 if __name__ == "__main__":

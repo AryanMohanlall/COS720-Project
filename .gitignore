@@ -2,4 +2,7 @@
 .venv/
 __pycache__/
 models/
+!artifacts/models/
+!artifacts/models/.gitkeep
+artifacts/models/*.joblib
 # reports/
