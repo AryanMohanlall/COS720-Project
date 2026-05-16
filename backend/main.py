@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import joblib
+import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -59,6 +60,7 @@ model_bundle: dict[str, Any] | None = None
 loaded_model_path: Path | None = None
 model_bundles_by_name: dict[str, dict[str, Any]] = {}
 loaded_model_paths_by_name: dict[str, Path] = {}
+shap_explainers_by_model_id: dict[int, Any] = {}
 
 
 class PredictionRequest(BaseModel):
@@ -180,6 +182,177 @@ def load_named_model_bundle(model_name: str) -> tuple[dict[str, Any], Path]:
     return bundle, path
 
 
+def raw_feature_name(encoded_feature_name: str) -> str:
+    return encoded_feature_name.split("=", 1)[0]
+
+
+def positive_class_shap_values(shap_values: Any) -> np.ndarray:
+    values = np.asarray(shap_values)
+
+    if isinstance(shap_values, list):
+        if len(shap_values) > 1:
+            values = np.asarray(shap_values[1])
+        else:
+            values = np.asarray(shap_values[0])
+
+    if values.ndim == 3:
+        values = values[:, :, 1] if values.shape[-1] > 1 else values[:, :, 0]
+
+    if values.ndim == 2:
+        return values[0]
+
+    return values
+
+
+def positive_class_base_value(expected_value: Any) -> float | None:
+    if expected_value is None:
+        return None
+
+    values = np.asarray(expected_value)
+    if values.ndim == 0:
+        return float(values)
+    if values.size > 1:
+        return float(values.reshape(-1)[1])
+    return float(values.reshape(-1)[0])
+
+
+def get_shap_explainer(model: Any):
+    model_id = id(model)
+    if model_id not in shap_explainers_by_model_id:
+        try:
+            import shap
+        except ImportError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="SHAP is not installed. Install backend requirements before requesting explanations.",
+            ) from exc
+
+        shap_explainers_by_model_id[model_id] = shap.TreeExplainer(model)
+
+    return shap_explainers_by_model_id[model_id]
+
+
+def xgboost_contributions(model: Any, vectorized, encoded_feature_names: list[str]):
+    try:
+        import xgboost as xgb
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="XGBoost is not installed. Install backend requirements before requesting explanations.",
+        ) from exc
+
+    booster = model.get_booster()
+    matrix = xgb.DMatrix(vectorized, feature_names=encoded_feature_names)
+    contributions = booster.predict(matrix, pred_contribs=True)[0]
+
+    return contributions[:-1], float(contributions[-1]), "xgboost_pred_contribs"
+
+
+def lightgbm_contributions(model: Any, vectorized):
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="X does not have valid feature names, but .* was fitted with feature names",
+            category=UserWarning,
+        )
+        contributions = np.asarray(model.predict(vectorized, pred_contrib=True))[0]
+    return contributions[:-1], float(contributions[-1]), "lightgbm_pred_contrib"
+
+
+def shap_tree_contributions(model: Any, vectorized):
+    explainer = get_shap_explainer(model)
+    shap_values = positive_class_shap_values(explainer.shap_values(vectorized))
+    base_value = positive_class_base_value(getattr(explainer, "expected_value", None))
+
+    return shap_values, base_value, "shap_tree_explainer"
+
+
+def model_contributions(
+    bundle: dict[str, Any],
+    vectorized,
+    encoded_feature_names: list[str],
+):
+    model = bundle["model"]
+    model_name = bundle.get("model_name")
+
+    if model_name == "xgboost":
+        return xgboost_contributions(model, vectorized, encoded_feature_names)
+    if model_name == "lightgbm":
+        return lightgbm_contributions(model, vectorized)
+
+    return shap_tree_contributions(model, vectorized)
+
+
+def explain_prediction(bundle: dict[str, Any], vectorized, features: dict[str, Any]):
+    vectorizer = bundle["vectorizer"]
+    encoded_feature_names = list(vectorizer.get_feature_names_out())
+    vector_values = np.asarray(vectorized).reshape(-1)
+    shap_values, base_value, method = model_contributions(
+        bundle,
+        vectorized,
+        encoded_feature_names,
+    )
+
+    encoded_contributions = []
+    raw_contributions: dict[str, dict[str, Any]] = {}
+
+    for encoded_name, encoded_value, shap_value in zip(
+        encoded_feature_names,
+        vector_values,
+        shap_values,
+        strict=False,
+    ):
+        raw_name = raw_feature_name(encoded_name)
+        contribution = float(shap_value)
+        encoded_contributions.append(
+            {
+                "feature": encoded_name,
+                "raw_feature": raw_name,
+                "value": float(encoded_value),
+                "shap_value": contribution,
+                "abs_shap_value": abs(contribution),
+                "direction": "increases_risk" if contribution >= 0 else "decreases_risk",
+            }
+        )
+
+        current = raw_contributions.setdefault(
+            raw_name,
+            {
+                "feature": raw_name,
+                "value": features.get(raw_name),
+                "shap_value": 0.0,
+                "abs_shap_value": 0.0,
+            },
+        )
+        current["shap_value"] += contribution
+
+    for contribution in raw_contributions.values():
+        contribution["abs_shap_value"] = abs(contribution["shap_value"])
+        contribution["direction"] = (
+            "increases_risk" if contribution["shap_value"] >= 0 else "decreases_risk"
+        )
+
+    sorted_raw_contributions = sorted(
+        raw_contributions.values(),
+        key=lambda contribution: contribution["abs_shap_value"],
+        reverse=True,
+    )
+    sorted_encoded_contributions = sorted(
+        encoded_contributions,
+        key=lambda contribution: contribution["abs_shap_value"],
+        reverse=True,
+    )
+
+    return {
+        "method": method,
+        "output": "raw_model_score",
+        "base_value": base_value,
+        "top_contributions": sorted_raw_contributions[:10],
+        "raw_feature_contributions": sorted_raw_contributions,
+        "encoded_feature_contributions": sorted_encoded_contributions[:20],
+    }
+
+
 def run_prediction(bundle: dict[str, Any], path: Path | None, request: PredictionRequest):
     numeric_columns = set(bundle.get("numeric_columns", []))
     features = {
@@ -199,6 +372,7 @@ def run_prediction(bundle: dict[str, Any], path: Path | None, request: Predictio
         )
         probability = float(bundle["model"].predict_proba(vectorized)[0, 1])
     threshold = float(bundle.get("decision_threshold", 0.5))
+    explanation = explain_prediction(bundle, vectorized, features)
 
     return {
         "model_name": bundle.get("model_name"),
@@ -206,6 +380,7 @@ def run_prediction(bundle: dict[str, Any], path: Path | None, request: Predictio
         "probability": probability,
         "decision_threshold": threshold,
         "prediction": int(probability >= threshold),
+        "explanation": explanation,
     }
 
 

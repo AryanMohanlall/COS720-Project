@@ -16,12 +16,31 @@ export type PredictionRequest = {
   features: PredictionFeatures;
 };
 
+export type ShapContribution = {
+  feature: string;
+  raw_feature?: string;
+  value: unknown;
+  shap_value: number;
+  abs_shap_value: number;
+  direction: "increases_risk" | "decreases_risk";
+};
+
+export type ShapExplanation = {
+  method: string;
+  output: string;
+  base_value: number | null;
+  top_contributions: ShapContribution[];
+  raw_feature_contributions: ShapContribution[];
+  encoded_feature_contributions: ShapContribution[];
+};
+
 export type PredictionResponse = {
   model_name: string;
   model_path: string | null;
   probability: number;
   decision_threshold: number;
   prediction: 0 | 1;
+  explanation?: ShapExplanation;
 };
 
 export type ConfusionMatrix = [[number, number], [number, number]];

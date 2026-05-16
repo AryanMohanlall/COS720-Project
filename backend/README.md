@@ -20,3 +20,5 @@ Supported `model_name` values:
 - `random_forest`
 
 Prediction endpoints accept `{"features": {...}}` using the raw training column names.
+Prediction responses include a SHAP explanation with the top raw feature
+contributions for the selected model.

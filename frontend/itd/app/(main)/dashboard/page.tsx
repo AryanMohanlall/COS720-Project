@@ -44,6 +44,44 @@ const SAMPLE_FEATURES: PredictionFeatures = {
   entry_during_weekend: 0,
 };
 
+const FEATURE_FIELDS = [
+  { name: "employee_department", label: "Department", type: "text" },
+  { name: "employee_campus", label: "Campus", type: "text" },
+  { name: "employee_position", label: "Position", type: "text" },
+  { name: "employee_seniority_years", label: "Seniority years", type: "number" },
+  { name: "is_contractor", label: "Is contractor", type: "number" },
+  { name: "employee_classification", label: "Classification", type: "number" },
+  { name: "has_foreign_citizenship", label: "Foreign citizenship", type: "number" },
+  { name: "has_criminal_record", label: "Criminal record", type: "number" },
+  { name: "has_medical_history", label: "Medical history", type: "number" },
+  { name: "employee_origin_country", label: "Origin country", type: "text" },
+  { name: "total_printed_pages", label: "Printed pages", type: "number" },
+  { name: "num_printed_pages_off_hours", label: "Off-hours pages", type: "number" },
+  { name: "total_files_burned", label: "Files burned", type: "number" },
+  { name: "burned_from_other", label: "Burned from other", type: "number" },
+  { name: "is_abroad", label: "Is abroad", type: "number" },
+  { name: "trip_day_number", label: "Trip day number", type: "number" },
+  { name: "hostility_country_level", label: "Hostility level", type: "number" },
+  { name: "num_entries", label: "Entries", type: "number" },
+  { name: "num_unique_campus", label: "Unique campuses", type: "number" },
+  { name: "late_exit_flag", label: "Late exit", type: "number" },
+  { name: "entry_during_weekend", label: "Weekend entry", type: "number" },
+] as const;
+
+const NUMERIC_FEATURES: ReadonlySet<string> = new Set(
+  FEATURE_FIELDS.filter((field) => field.type === "number").map(
+    (field) => field.name,
+  ),
+);
+
+const FEATURE_LABELS = FEATURE_FIELDS.reduce<Record<string, string>>(
+  (labels, field) => ({
+    ...labels,
+    [field.name]: field.label,
+  }),
+  {},
+);
+
 function formatPercent(value: number | undefined) {
   if (typeof value !== "number") {
     return "n/a";
@@ -58,6 +96,90 @@ function formatNumber(value: number | undefined) {
   return value.toLocaleString();
 }
 
+function formatShapValue(value: number) {
+  const sign = value >= 0 ? "+" : "";
+  return `${sign}${value.toFixed(4)}`;
+}
+
+function formatFeatureValue(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return "blank";
+  }
+  if (typeof value === "number") {
+    return value.toLocaleString();
+  }
+  if (typeof value === "string" || typeof value === "boolean") {
+    return value.toString();
+  }
+  return JSON.stringify(value);
+}
+
+function readableFeatureName(feature: string) {
+  return FEATURE_LABELS[feature] ?? feature.replaceAll("_", " ");
+}
+
+function shapMagnitude(value: number) {
+  const absoluteValue = Math.abs(value);
+  if (absoluteValue >= 1) {
+    return "strong";
+  }
+  if (absoluteValue >= 0.25) {
+    return "moderate";
+  }
+  return "small";
+}
+
+function shapSentence(contribution: {
+  feature: string;
+  value: unknown;
+  shap_value: number;
+  direction: "increases_risk" | "decreases_risk";
+}) {
+  const feature = readableFeatureName(contribution.feature);
+  const value = formatFeatureValue(contribution.value);
+  const direction =
+    contribution.direction === "increases_risk"
+      ? "pushed the score toward a malicious prediction"
+      : "pushed the score away from a malicious prediction";
+
+  return `${feature} (${value}) had a ${shapMagnitude(
+    contribution.shap_value,
+  )} effect and ${direction}.`;
+}
+
+function shapSummary(prediction: PredictionResponse) {
+  const topContributions = prediction.explanation?.top_contributions ?? [];
+  const riskDrivers = topContributions.filter(
+    (contribution) => contribution.direction === "increases_risk",
+  );
+  const protectiveDrivers = topContributions.filter(
+    (contribution) => contribution.direction === "decreases_risk",
+  );
+  const strongestRisk = riskDrivers[0];
+  const strongestProtective = protectiveDrivers[0];
+  const predictedLabel =
+    prediction.prediction === 1 ? "malicious" : "not malicious";
+
+  if (!strongestRisk && !strongestProtective) {
+    return `The model predicted ${predictedLabel}, but no SHAP drivers were returned.`;
+  }
+
+  if (strongestRisk && strongestProtective) {
+    return `The model predicted ${predictedLabel}. The strongest risk driver was ${readableFeatureName(
+      strongestRisk.feature,
+    )}, while ${readableFeatureName(
+      strongestProtective.feature,
+    )} most reduced the risk score.`;
+  }
+
+  const strongestDriver = strongestRisk ?? strongestProtective;
+  return `The model predicted ${predictedLabel}. The strongest driver was ${readableFeatureName(
+    strongestDriver.feature,
+  )}, which ${
+    strongestDriver.direction === "increases_risk" ? "increased" : "reduced"
+  } the risk score.`;
+}
+
 function getErrorMessage(error: unknown) {
   if (error instanceof ApiError) {
     return error.message;
@@ -68,15 +190,101 @@ function getErrorMessage(error: unknown) {
   return "Request failed";
 }
 
+function coerceFeatureValue(name: string, value: string) {
+  const trimmed = value.trim();
+  if (trimmed === "") {
+    return null;
+  }
+  if (!NUMERIC_FEATURES.has(name)) {
+    return trimmed;
+  }
+
+  const numberValue = Number(trimmed);
+  if (Number.isNaN(numberValue)) {
+    throw new Error(`${name} must be numeric.`);
+  }
+  return numberValue;
+}
+
+function parseCsvRows(csv: string) {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < csv.length; index += 1) {
+    const character = csv[index];
+    const nextCharacter = csv[index + 1];
+
+    if (character === '"' && inQuotes && nextCharacter === '"') {
+      cell += '"';
+      index += 1;
+      continue;
+    }
+
+    if (character === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+
+    if (character === "," && !inQuotes) {
+      row.push(cell);
+      cell = "";
+      continue;
+    }
+
+    if ((character === "\n" || character === "\r") && !inQuotes) {
+      if (character === "\r" && nextCharacter === "\n") {
+        index += 1;
+      }
+      row.push(cell);
+      if (row.some((value) => value.trim() !== "")) {
+        rows.push(row);
+      }
+      row = [];
+      cell = "";
+      continue;
+    }
+
+    cell += character;
+  }
+
+  row.push(cell);
+  if (row.some((value) => value.trim() !== "")) {
+    rows.push(row);
+  }
+
+  return rows;
+}
+
+function featuresFromCsv(csv: string, currentFeatures: PredictionFeatures) {
+  const rows = parseCsvRows(csv);
+  if (rows.length < 2) {
+    throw new Error("CSV must include a header row and at least one data row.");
+  }
+
+  const headers = rows[0].map((header) => header.trim());
+  const firstDataRow = rows[1];
+  const nextFeatures = { ...currentFeatures };
+
+  headers.forEach((header, index) => {
+    if (!FEATURE_FIELDS.some((field) => field.name === header)) {
+      return;
+    }
+    nextFeatures[header] = coerceFeatureValue(header, firstDataRow[index] ?? "");
+  });
+
+  return nextFeatures;
+}
+
 export default function Dashboard() {
   const [selectedModel, setSelectedModel] = useState<ModelName>("xgboost");
   const [status, setStatus] = useState<ModelsStatusResponse | null>(null);
   const [metrics, setMetrics] = useState<Partial<Record<ModelName, MetricsResponse>>>({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [featureJson, setFeatureJson] = useState(
-    JSON.stringify(SAMPLE_FEATURES, null, 2),
-  );
+  const [formFeatures, setFormFeatures] = useState<PredictionFeatures>(SAMPLE_FEATURES);
+  const [csvInput, setCsvInput] = useState("");
   const [prediction, setPrediction] = useState<PredictionResponse | null>(null);
   const [predicting, setPredicting] = useState(false);
   const [predictionError, setPredictionError] = useState<string | null>(null);
@@ -146,14 +354,47 @@ export default function Dashboard() {
     setPredictionError(null);
 
     try {
-      const parsedFeatures = JSON.parse(featureJson) as PredictionFeatures;
-      const result = await api.predictModel(selectedModel, parsedFeatures);
+      const result = await api.predictModel(selectedModel, formFeatures);
       setPrediction(result);
     } catch (error) {
       setPredictionError(getErrorMessage(error));
     } finally {
       setPredicting(false);
     }
+  }
+
+  function handleFeatureChange(name: string, value: string) {
+    setPrediction(null);
+    setPredictionError(null);
+
+    try {
+      setFormFeatures((currentFeatures) => ({
+        ...currentFeatures,
+        [name]: coerceFeatureValue(name, value),
+      }));
+    } catch (error) {
+      setPredictionError(getErrorMessage(error));
+    }
+  }
+
+  function applyCsvInput(csv: string) {
+    try {
+      setFormFeatures((currentFeatures) => featuresFromCsv(csv, currentFeatures));
+      setPrediction(null);
+      setPredictionError(null);
+    } catch (error) {
+      setPredictionError(getErrorMessage(error));
+    }
+  }
+
+  async function handleCsvFile(file: File | undefined) {
+    if (!file) {
+      return;
+    }
+
+    const text = await file.text();
+    setCsvInput(text);
+    applyCsvInput(text);
   }
 
   return (
@@ -331,16 +572,59 @@ export default function Dashboard() {
             <div>
               <h2 className="text-lg font-semibold">Prediction test</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Send raw feature values to the selected model.
+                Enter feature values manually or load the first row from a CSV.
               </p>
             </div>
 
-            <textarea
-              value={featureJson}
-              onChange={(event) => setFeatureJson(event.target.value)}
-              spellCheck={false}
-              className="mt-4 h-80 w-full resize-y rounded-md border border-slate-300 bg-slate-950 p-4 font-mono text-xs leading-5 text-slate-100 outline-none ring-sky-500 focus:ring-2"
-            />
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {FEATURE_FIELDS.map((field) => (
+                <label key={field.name} className="text-sm">
+                  <span className="font-medium text-slate-700">{field.label}</span>
+                  <input
+                    type={field.type}
+                    value={formFeatures[field.name]?.toString() ?? ""}
+                    onChange={(event) =>
+                      handleFeatureChange(field.name, event.target.value)
+                    }
+                    className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-sky-500 focus:ring-2"
+                  />
+                </label>
+              ))}
+            </div>
+
+            <div className="mt-5 rounded-md border border-slate-200 bg-slate-50 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-800">CSV input</h3>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Use headers matching the training columns. The first data row
+                    fills the form.
+                  </p>
+                </div>
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={(event) => handleCsvFile(event.target.files?.[0])}
+                  className="text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-950 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white"
+                />
+              </div>
+
+              <textarea
+                value={csvInput}
+                onChange={(event) => setCsvInput(event.target.value)}
+                placeholder="employee_department,employee_campus,...&#10;IT,Campus A,..."
+                spellCheck={false}
+                className="mt-3 h-28 w-full resize-y rounded-md border border-slate-300 bg-white p-3 font-mono text-xs leading-5 outline-none ring-sky-500 focus:ring-2"
+              />
+
+              <button
+                type="button"
+                onClick={() => applyCsvInput(csvInput)}
+                className="mt-3 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-100"
+              >
+                Load first CSV row
+              </button>
+            </div>
 
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <button
@@ -357,25 +641,101 @@ export default function Dashboard() {
             </div>
 
             {prediction ? (
-              <div className="mt-5 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm sm:grid-cols-3">
-                <div>
-                  <p className="text-slate-500">Prediction</p>
-                  <p className="mt-1 text-2xl font-semibold">
-                    {prediction.prediction === 1 ? "Malicious" : "Not malicious"}
-                  </p>
+              <div className="mt-5 space-y-4">
+                <div className="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm sm:grid-cols-3">
+                  <div>
+                    <p className="text-slate-500">Prediction</p>
+                    <p className="mt-1 text-2xl font-semibold">
+                      {prediction.prediction === 1 ? "Malicious" : "Not malicious"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Probability</p>
+                    <p className="mt-1 text-2xl font-semibold">
+                      {formatPercent(prediction.probability)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Threshold</p>
+                    <p className="mt-1 text-2xl font-semibold">
+                      {formatPercent(prediction.decision_threshold)}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-slate-500">Probability</p>
-                  <p className="mt-1 text-2xl font-semibold">
-                    {formatPercent(prediction.probability)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-slate-500">Threshold</p>
-                  <p className="mt-1 text-2xl font-semibold">
-                    {formatPercent(prediction.decision_threshold)}
-                  </p>
-                </div>
+
+                {prediction.explanation ? (
+                  <div className="rounded-md border border-slate-200 bg-white p-4">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                      <div>
+                        <h3 className="text-sm font-semibold text-slate-800">
+                          Explanation
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          Plain-language summary of the strongest SHAP
+                          contributions.
+                        </p>
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        Base value:{" "}
+                        {prediction.explanation.base_value === null
+                          ? "n/a"
+                          : prediction.explanation.base_value.toFixed(4)}
+                      </p>
+                    </div>
+
+                    <div className="mt-4 rounded-md border border-sky-100 bg-sky-50 p-3 text-sm leading-6 text-sky-950">
+                      {shapSummary(prediction)}
+                    </div>
+
+                    <ul className="mt-4 space-y-2">
+                      {prediction.explanation.top_contributions
+                        .slice(0, 5)
+                        .map((contribution) => (
+                          <li
+                            key={`sentence-${contribution.feature}`}
+                            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-700"
+                          >
+                            {shapSentence(contribution)}
+                          </li>
+                        ))}
+                    </ul>
+
+                    <h4 className="mt-5 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                      Contribution details
+                    </h4>
+                    <div className="mt-4 space-y-2">
+                      {prediction.explanation.top_contributions.map((contribution) => (
+                        <div
+                          key={contribution.feature}
+                          className="grid gap-2 rounded-md bg-slate-50 p-3 text-sm sm:grid-cols-[1fr_auto]"
+                        >
+                          <div>
+                            <p className="font-medium text-slate-800">
+                              {readableFeatureName(contribution.feature)}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              Value: {formatFeatureValue(contribution.value)}
+                            </p>
+                          </div>
+                          <div
+                            className={`text-right font-semibold ${
+                              contribution.direction === "increases_risk"
+                                ? "text-rose-700"
+                                : "text-emerald-700"
+                            }`}
+                          >
+                            {formatShapValue(contribution.shap_value)}
+                            <p className="text-xs font-normal text-slate-500">
+                              {contribution.direction === "increases_risk"
+                                ? "increases risk"
+                                : "decreases risk"}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </article>
