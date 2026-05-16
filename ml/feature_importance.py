@@ -6,6 +6,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 from sklearn.metrics import (
+    accuracy_score,
     average_precision_score,
     confusion_matrix,
     f1_score,
@@ -89,6 +90,7 @@ def compute_metrics(y_true, probabilities, threshold: float) -> dict:
     tn, fp, fn, tp = confusion_matrix(y_true, predictions, labels=[0, 1]).ravel()
     return {
         "decision_threshold": float(threshold),
+        "accuracy": accuracy_score(y_true, predictions),
         "roc_auc": roc_auc_score(y_true, probabilities),
         "pr_auc": average_precision_score(y_true, probabilities),
         "precision": precision_score(y_true, predictions, zero_division=0),

@@ -9,6 +9,7 @@ import optuna
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.metrics import (
+    accuracy_score,
     average_precision_score,
     classification_report,
     confusion_matrix,
@@ -136,6 +137,7 @@ def compute_metrics(y_true, predictions, probabilities):
     tn, fp, fn, tp = confusion_matrix(y_true, predictions, labels=[0, 1]).ravel()
     return {
         "decision_threshold": None,
+        "accuracy": accuracy_score(y_true, predictions),
         "roc_auc": roc_auc_score(y_true, probabilities),
         "pr_auc": average_precision_score(y_true, probabilities),
         "precision": precision_score(y_true, predictions, zero_division=0),

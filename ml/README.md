@@ -6,6 +6,8 @@ This folder contains:
 - `models/` for local trained model copies
 - `reports/` for evaluation output
 - `train_random_forest.py` for Random Forest training
+- `train_xgboost.py` for XGBoost training
+- `train_lightgbm.py` for LightGBM training
 
 ## Setup
 
@@ -19,7 +21,8 @@ pip install -r ml\requirements.txt
 
 ```powershell
 python ml\train_random_forest.py
-python ml\train_boosting.py --target-recall 0.99
+python ml\train_xgboost.py --target-recall 0.99
+python ml\train_lightgbm.py --target-recall 0.99
 python ml\feature_importance.py --model ml\models\xgboost_model.joblib --repeats 5
 ```
 
