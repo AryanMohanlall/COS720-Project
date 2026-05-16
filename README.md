@@ -21,3 +21,9 @@ Training writes model bundles to both `ml/models/` and `artifacts/models/`.
 The backend reads from `artifacts/models/` when run through Docker Compose,
 preferring XGBoost, then LightGBM, then Random Forest. Set `MODEL_PATH` to use
 a specific artifact.
+
+
+Todo:
+confidence score
+clean up
+feature engineering
