@@ -8,3 +8,4 @@ ml/models/*.joblib
 !artifacts/models/.gitkeep
 artifacts/models/*.joblib
 # reports/
+.venv-wsl/
