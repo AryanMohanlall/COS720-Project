@@ -38,6 +38,7 @@ export type PredictionResponse = {
   model_name: string;
   model_path: string | null;
   probability: number;
+  confidence: number;
   decision_threshold: number;
   prediction: 0 | 1;
   explanation?: ShapExplanation;

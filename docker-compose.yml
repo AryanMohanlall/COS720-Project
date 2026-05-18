@@ -8,6 +8,7 @@ services:
       - ENVIRONMENT=production
     volumes:
       - ./artifacts:/app/artifacts:ro
+      - ./ml/reports:/app/reports:ro
 
   frontend:
     build:

@@ -163,6 +163,14 @@ function coerceFeatureValue(name: string, value: string) {
   return numberValue;
 }
 
+function chunk<T>(arr: readonly T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    result.push(arr.slice(i, i + size) as T[]);
+  }
+  return result;
+}
+
 function parseCsvRows(csv: string) {
   const rows: string[][] = [];
   let row: string[] = [];
@@ -319,11 +327,11 @@ export default function Dashboard() {
   const [statusText, statusDot] = statusColor.split(" ");
 
   return (
-    <main className="min-h-screen bg-[#020b14] cyber-grid px-4 py-6 text-slate-200 sm:px-6 sm:py-8">
+    <main className="min-h-screen bg-[#0f172a] cyber-grid px-4 py-6 text-slate-200 sm:px-6 sm:py-8">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-5">
 
         {/* ── Header ───────────────────────────────────────────── */}
-        <header className="relative overflow-hidden rounded-sm border border-cyan-500/20 bg-slate-900 px-6 py-5 shadow-[0_0_40px_rgba(6,182,212,0.07)]">
+        <header className="relative overflow-hidden rounded-sm border border-cyan-500/20 bg-slate-800 px-6 py-5 shadow-[0_0_40px_rgba(6,182,212,0.07)]">
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-500 to-transparent" />
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="space-y-1">
@@ -333,11 +341,11 @@ export default function Dashboard() {
               <h1 className="font-mono text-xl font-black tracking-tight text-slate-100 sm:text-2xl">
                 THREAT INTELLIGENCE CENTER
               </h1>
-              <p className="font-mono text-[10px] text-slate-600 uppercase tracking-widest">
+              <p className="font-mono text-[10px] text-slate-500 uppercase tracking-widest">
                 SYS :: {API_BASE_URL}
               </p>
             </div>
-            <div className="flex items-center gap-2.5 self-start rounded-sm border border-slate-700 bg-slate-800/60 px-3 py-2 font-mono text-xs md:self-auto">
+            <div className="flex items-center gap-2.5 self-start rounded-sm border border-slate-600 bg-slate-700/60 px-3 py-2 font-mono text-xs md:self-auto">
               <span className={`blink h-2 w-2 rounded-full ${statusDot}`} />
               <span className={statusText}>{sysStatus}</span>
             </div>
@@ -363,8 +371,8 @@ export default function Dashboard() {
                 onClick={() => setSelectedModel(modelName)}
                 className={`relative overflow-hidden rounded-sm border p-5 text-left transition-all ${
                   isSelected
-                    ? "border-cyan-500/50 bg-slate-800/70 shadow-[0_0_24px_rgba(6,182,212,0.12)]"
-                    : "border-slate-700/40 bg-slate-900 hover:border-slate-600/60 hover:bg-slate-800/40"
+                    ? "border-cyan-500/50 bg-slate-700/70 shadow-[0_0_24px_rgba(6,182,212,0.12)]"
+                    : "border-slate-600/40 bg-slate-800 hover:border-slate-600/60 hover:bg-slate-700/40"
                 }`}
               >
                 {/* Selected left stripe */}
@@ -378,7 +386,7 @@ export default function Dashboard() {
 
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="font-mono text-[9px] uppercase tracking-[0.3em] text-slate-500">
+                    <p className="font-mono text-[9px] uppercase tracking-[0.3em] text-slate-400">
                       Algorithm Node
                     </p>
                     <h2 className="mt-1 font-mono text-base font-bold text-slate-100">
@@ -405,8 +413,8 @@ export default function Dashboard() {
                       { label: "F1", value: formatPercent(modelMetrics?.f1) },
                     ] as const
                   ).map(({ label, value }) => (
-                    <div key={label} className="rounded-sm bg-slate-800/50 px-3 py-2.5">
-                      <dt className="font-mono text-[9px] uppercase tracking-widest text-slate-500">
+                    <div key={label} className="rounded-sm bg-slate-700/50 px-3 py-2.5">
+                      <dt className="font-mono text-[9px] uppercase tracking-widest text-slate-400">
                         {label}
                       </dt>
                       <dd className="mt-1 font-mono text-lg font-bold text-slate-100">
@@ -424,8 +432,8 @@ export default function Dashboard() {
         <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
 
           {/* ── Left: Model Details ──────────────────────────── */}
-          <article className="rounded-sm border border-slate-700/40 bg-slate-900 shadow-[0_2px_20px_rgba(0,0,0,0.4)]">
-            <div className="border-b border-slate-700/40 px-5 py-4">
+          <article className="rounded-sm border border-slate-600/40 bg-slate-800 shadow-[0_2px_20px_rgba(0,0,0,0.4)]">
+            <div className="border-b border-slate-600/40 px-5 py-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-cyan-500/70">
@@ -457,8 +465,8 @@ export default function Dashboard() {
                     { label: "PR-AUC", value: formatPercent(selectedMetrics?.pr_auc) },
                   ] as const
                 ).map(({ label, value }) => (
-                  <div key={label} className="rounded-sm border border-slate-700/30 bg-slate-800/50 p-3">
-                    <dt className="font-mono text-[9px] uppercase tracking-widest text-slate-500">
+                  <div key={label} className="rounded-sm border border-slate-600/30 bg-slate-700/50 p-3">
+                    <dt className="font-mono text-[9px] uppercase tracking-widest text-slate-400">
                       {label}
                     </dt>
                     <dd className="mt-1.5 font-mono text-2xl font-black text-slate-100">
@@ -470,23 +478,23 @@ export default function Dashboard() {
 
               {/* Confusion Matrix */}
               <div>
-                <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-slate-500 mb-3">
+                <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-slate-400 mb-3">
                   // DETECTION MATRIX
                 </p>
-                <div className="grid grid-cols-2 overflow-hidden rounded-sm border border-slate-700/40 text-center text-sm">
-                  <div className="border-b border-r border-slate-700/40 bg-emerald-950/30 p-4">
+                <div className="grid grid-cols-2 overflow-hidden rounded-sm border border-slate-600/40 text-center text-sm">
+                  <div className="border-b border-r border-slate-600/40 bg-emerald-950/30 p-4">
                     <p className="font-mono text-[9px] uppercase tracking-widest text-emerald-500/70">True Negatives</p>
                     <p className="mt-1.5 font-mono text-xl font-black text-emerald-400">
                       {formatNumber(matrix?.[0]?.[0])}
                     </p>
                   </div>
-                  <div className="border-b border-slate-700/40 bg-amber-950/20 p-4">
+                  <div className="border-b border-slate-600/40 bg-amber-950/20 p-4">
                     <p className="font-mono text-[9px] uppercase tracking-widest text-amber-500/70">False Positives</p>
                     <p className="mt-1.5 font-mono text-xl font-black text-amber-400">
                       {formatNumber(matrix?.[0]?.[1])}
                     </p>
                   </div>
-                  <div className="border-r border-slate-700/40 bg-red-950/30 p-4">
+                  <div className="border-r border-slate-600/40 bg-red-950/30 p-4">
                     <p className="font-mono text-[9px] uppercase tracking-widest text-red-500/70">False Negatives</p>
                     <p className="mt-1.5 font-mono text-xl font-black text-red-400">
                       {formatNumber(matrix?.[1]?.[0])}
@@ -502,7 +510,7 @@ export default function Dashboard() {
               </div>
 
               {/* Artifact paths */}
-              <div className="space-y-1 rounded-sm border border-slate-700/30 bg-slate-800/30 px-3 py-2.5 font-mono text-[10px] text-slate-600">
+              <div className="space-y-1 rounded-sm border border-slate-600/30 bg-slate-700/30 px-3 py-2.5 font-mono text-[10px] text-slate-500">
                 <p>MODEL :: {selectedStatus?.model_path ?? "n/a"}</p>
                 <p>METRICS :: {selectedStatus?.metrics_path ?? "n/a"}</p>
               </div>
@@ -510,72 +518,78 @@ export default function Dashboard() {
           </article>
 
           {/* ── Right: Prediction Panel ──────────────────────── */}
-          <article className="rounded-sm border border-slate-700/40 bg-slate-900 shadow-[0_2px_20px_rgba(0,0,0,0.4)]">
-            <div className="border-b border-slate-700/40 px-5 py-4">
+          <article className="rounded-sm border border-slate-600/40 bg-slate-800 shadow-[0_2px_20px_rgba(0,0,0,0.4)]">
+            <div className="border-b border-slate-600/40 px-5 py-4">
               <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-cyan-500/70">
                 // BEHAVIORAL THREAT ANALYZER
               </p>
               <h2 className="mt-0.5 font-mono text-sm font-bold text-slate-100">
                 Prediction Test
               </h2>
-              <p className="mt-0.5 font-mono text-[10px] text-slate-500">
+              <p className="mt-0.5 font-mono text-[10px] text-slate-400">
                 Enter feature values manually or load from CSV.
               </p>
             </div>
 
             <div className="p-5 space-y-5">
               {/* Feature inputs — spreadsheet */}
-              <div className="overflow-hidden rounded-sm border border-slate-700/50 font-mono text-xs">
+              <div className="overflow-hidden rounded-sm border border-slate-600/50 font-mono text-xs">
                 {/* Header row */}
-                <div className="grid grid-cols-[28px_1fr_1fr] border-b border-slate-600/60 bg-slate-800/80 select-none">
-                  <div className="flex items-center justify-center border-r border-slate-700/50 py-2 text-[9px] uppercase tracking-widest text-slate-600">
-                    #
-                  </div>
-                  <div className="border-r border-slate-700/50 px-3 py-2 text-[9px] uppercase tracking-widest text-slate-500">
-                    Field
-                  </div>
-                  <div className="px-3 py-2 text-[9px] uppercase tracking-widest text-slate-500">
-                    Value
-                  </div>
+                <div className="grid grid-cols-[24px_1fr_1fr_24px_1fr_1fr] border-b border-slate-600/60 bg-slate-700/80 select-none">
+                  <div className="flex items-center justify-center border-r border-slate-600/50 py-2 text-[9px] uppercase tracking-widest text-slate-500">#</div>
+                  <div className="border-r border-slate-600/50 px-3 py-2 text-[9px] uppercase tracking-widest text-slate-400">Field</div>
+                  <div className="border-r border-slate-600/50 px-3 py-2 text-[9px] uppercase tracking-widest text-slate-400">Value</div>
+                  <div className="flex items-center justify-center border-r border-slate-600/50 py-2 text-[9px] uppercase tracking-widest text-slate-500">#</div>
+                  <div className="border-r border-slate-600/50 px-3 py-2 text-[9px] uppercase tracking-widest text-slate-400">Field</div>
+                  <div className="px-3 py-2 text-[9px] uppercase tracking-widest text-slate-400">Value</div>
                 </div>
 
-                {/* Data rows */}
-                {FEATURE_FIELDS.map((field, i) => (
-                  <div
-                    key={field.name}
-                    className={`grid grid-cols-[28px_1fr_1fr] border-b border-slate-700/30 last:border-b-0 ${
-                      i % 2 === 0 ? "bg-slate-900/80" : "bg-slate-800/25"
-                    }`}
-                  >
-                    {/* Row number */}
-                    <div className="flex items-center justify-center border-r border-slate-700/30 text-[9px] text-slate-600 select-none">
-                      {i + 1}
+                {/* Data rows — two features per row */}
+                {chunk(FEATURE_FIELDS, 2).map((pair, pairIdx) => {
+                  const a = pair[0]!;
+                  const b = pair[1];
+                  return (
+                    <div
+                      key={a.name}
+                      className={`grid grid-cols-[24px_1fr_1fr_24px_1fr_1fr] border-b border-slate-600/30 last:border-b-0 ${
+                        pairIdx % 2 === 0 ? "bg-slate-700/80" : "bg-slate-700/25"
+                      }`}
+                    >
+                      <div className="flex items-center justify-center border-r border-slate-600/30 text-[9px] text-slate-500 select-none">{pairIdx * 2 + 1}</div>
+                      <div className="flex items-center border-r border-slate-600/30 px-3 py-1.5 text-[10px] uppercase tracking-wider text-slate-400 select-none">{a.label}</div>
+                      <div className="border-r border-slate-600/30 transition-colors focus-within:bg-cyan-950/40 focus-within:ring-1 focus-within:ring-inset focus-within:ring-cyan-500/50">
+                        <input
+                          type={a.type}
+                          value={formFeatures[a.name]?.toString() ?? ""}
+                          onChange={(e) => handleFeatureChange(a.name, e.target.value)}
+                          className="w-full bg-transparent px-3 py-1.5 text-slate-100 outline-none"
+                        />
+                      </div>
+                      <div className="flex items-center justify-center border-r border-slate-600/30 text-[9px] text-slate-500 select-none">{b ? pairIdx * 2 + 2 : ""}</div>
+                      <div className="flex items-center border-r border-slate-600/30 px-3 py-1.5 text-[10px] uppercase tracking-wider text-slate-400 select-none">{b?.label ?? ""}</div>
+                      <div className="transition-colors focus-within:bg-cyan-950/40 focus-within:ring-1 focus-within:ring-inset focus-within:ring-cyan-500/50">
+                        {b ? (
+                          <input
+                            type={b.type}
+                            value={formFeatures[b.name]?.toString() ?? ""}
+                            onChange={(e) => handleFeatureChange(b.name, e.target.value)}
+                            className="w-full bg-transparent px-3 py-1.5 text-slate-100 outline-none"
+                          />
+                        ) : null}
+                      </div>
                     </div>
-                    {/* Field name */}
-                    <div className="flex items-center border-r border-slate-700/30 px-3 py-1.5 text-[10px] uppercase tracking-wider text-slate-400 select-none">
-                      {field.label}
-                    </div>
-                    {/* Value cell */}
-                    <div className="transition-colors focus-within:bg-cyan-950/40 focus-within:ring-1 focus-within:ring-inset focus-within:ring-cyan-500/50">
-                      <input
-                        type={field.type}
-                        value={formFeatures[field.name]?.toString() ?? ""}
-                        onChange={(e) => handleFeatureChange(field.name, e.target.value)}
-                        className="w-full bg-transparent px-3 py-1.5 text-slate-100 outline-none"
-                      />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* CSV input */}
-              <div className="rounded-sm border border-slate-700/40 bg-slate-800/30 p-4">
+              <div className="rounded-sm border border-slate-600/40 bg-slate-700/30 p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-slate-400">
                       // CSV Input Terminal
                     </p>
-                    <p className="mt-1 font-mono text-[10px] text-slate-600">
+                    <p className="mt-1 font-mono text-[10px] text-slate-500">
                       Use training column headers. First data row fills the form.
                     </p>
                   </div>
@@ -583,7 +597,7 @@ export default function Dashboard() {
                     type="file"
                     accept=".csv,text/csv"
                     onChange={(e) => handleCsvFile(e.target.files?.[0])}
-                    className="font-mono text-xs text-slate-500 file:mr-3 file:rounded-sm file:border-0 file:bg-slate-700 file:px-3 file:py-1.5 file:font-mono file:text-xs file:font-bold file:text-slate-200 file:transition file:hover:bg-slate-600"
+                    className="font-mono text-xs text-slate-400 file:mr-3 file:rounded-sm file:border-0 file:bg-slate-700 file:px-3 file:py-1.5 file:font-mono file:text-xs file:font-bold file:text-slate-200 file:transition file:hover:bg-slate-600"
                   />
                 </div>
                 <textarea
@@ -591,7 +605,7 @@ export default function Dashboard() {
                   onChange={(e) => setCsvInput(e.target.value)}
                   placeholder="employee_department,employee_campus,...&#10;IT,Campus A,..."
                   spellCheck={false}
-                  className="mt-3 h-24 w-full resize-y rounded-sm border border-slate-700 bg-slate-900 p-3 font-mono text-[10px] leading-5 text-slate-400 outline-none transition focus:border-cyan-500/50 focus:shadow-[0_0_0_2px_rgba(6,182,212,0.1)]"
+                  className="mt-3 h-24 w-full resize-y rounded-sm border border-slate-600 bg-slate-800 p-3 font-mono text-[10px] leading-5 text-slate-400 outline-none transition focus:border-cyan-500/50 focus:shadow-[0_0_0_2px_rgba(6,182,212,0.1)]"
                 />
                 <button
                   type="button"
@@ -631,12 +645,12 @@ export default function Dashboard() {
                     }`}
                   >
                     <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-current to-transparent opacity-40" />
-                    <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-slate-500 mb-3">
+                    <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-slate-400 mb-3">
                       // THREAT ASSESSMENT RESULT
                     </p>
-                    <div className="grid gap-3 text-sm sm:grid-cols-3">
+                    <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                       <div>
-                        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">
+                        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-400">
                           Prediction
                         </p>
                         <p className={`mt-1.5 font-mono text-2xl font-black ${
@@ -646,7 +660,19 @@ export default function Dashboard() {
                         </p>
                       </div>
                       <div>
-                        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">
+                        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-400">
+                          Confidence
+                        </p>
+                        <p className={`mt-1.5 font-mono text-2xl font-black ${
+                          prediction.confidence >= 0.8
+                            ? prediction.prediction === 1 ? "text-red-400" : "text-emerald-400"
+                            : "text-yellow-400"
+                        }`}>
+                          {formatPercent(prediction.confidence)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-400">
                           Probability
                         </p>
                         <p className="mt-1.5 font-mono text-2xl font-black text-slate-100">
@@ -654,7 +680,7 @@ export default function Dashboard() {
                         </p>
                       </div>
                       <div>
-                        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">
+                        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-400">
                           Threshold
                         </p>
                         <p className="mt-1.5 font-mono text-2xl font-black text-slate-100">
@@ -666,17 +692,17 @@ export default function Dashboard() {
 
                   {/* SHAP Explanation */}
                   {prediction.explanation ? (
-                    <div className="rounded-sm border border-slate-700/40 bg-slate-800/30 p-4 space-y-4">
+                    <div className="rounded-sm border border-slate-600/40 bg-slate-700/30 p-4 space-y-4">
                       <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                         <div>
                           <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-cyan-500/70">
                             // BEHAVIORAL INDICATORS
                           </p>
-                          <p className="mt-0.5 font-mono text-[10px] text-slate-500">
+                          <p className="mt-0.5 font-mono text-[10px] text-slate-400">
                             SHAP contribution analysis — strongest drivers ranked.
                           </p>
                         </div>
-                        <p className="font-mono text-[10px] text-slate-600">
+                        <p className="font-mono text-[10px] text-slate-500">
                           BASE::{" "}
                           {prediction.explanation.base_value === null
                             ? "n/a"
@@ -694,7 +720,7 @@ export default function Dashboard() {
                         {prediction.explanation.top_contributions.slice(0, 5).map((c) => (
                           <li
                             key={`s-${c.feature}`}
-                            className="rounded-sm border border-slate-700/30 bg-slate-800/40 px-3 py-2 font-mono text-xs leading-6 text-slate-400"
+                            className="rounded-sm border border-slate-600/30 bg-slate-700/40 px-3 py-2 font-mono text-xs leading-6 text-slate-400"
                           >
                             {shapSentence(c)}
                           </li>
@@ -703,7 +729,7 @@ export default function Dashboard() {
 
                       {/* Contribution details */}
                       <div>
-                        <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-slate-500 mb-3">
+                        <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-slate-400 mb-3">
                           // CONTRIBUTION DETAILS
                         </p>
                         <div className="space-y-2">
@@ -720,7 +746,7 @@ export default function Dashboard() {
                                 <p className="font-mono text-xs font-semibold text-slate-200">
                                   {readableFeatureName(c.feature)}
                                 </p>
-                                <p className="font-mono text-[10px] text-slate-500">
+                                <p className="font-mono text-[10px] text-slate-400">
                                   VAL :: {formatFeatureValue(c.value)}
                                 </p>
                               </div>
@@ -730,7 +756,7 @@ export default function Dashboard() {
                                   : "text-emerald-400"
                               }`}>
                                 <p className="text-sm">{formatShapValue(c.shap_value)}</p>
-                                <p className="text-[9px] font-normal uppercase tracking-widest text-slate-500">
+                                <p className="text-[9px] font-normal uppercase tracking-widest text-slate-400">
                                   {c.direction === "increases_risk" ? "↑ RISK" : "↓ RISK"}
                                 </p>
                               </div>

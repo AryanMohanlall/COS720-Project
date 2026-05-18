@@ -374,10 +374,13 @@ def run_prediction(bundle: dict[str, Any], path: Path | None, request: Predictio
     threshold = float(bundle.get("decision_threshold", 0.5))
     explanation = explain_prediction(bundle, vectorized, features)
 
+    confidence = max(probability, 1.0 - probability)
+
     return {
         "model_name": bundle.get("model_name"),
         "model_path": str(path) if path is not None else None,
         "probability": probability,
+        "confidence": confidence,
         "decision_threshold": threshold,
         "prediction": int(probability >= threshold),
         "explanation": explanation,
