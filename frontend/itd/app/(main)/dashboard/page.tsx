@@ -11,6 +11,7 @@ import {
   type ModelsStatusResponse,
   type PredictionFeatures,
   type PredictionResponse,
+  type ScenarioSummaryResponse,
   api,
 } from "@/services/api";
 
@@ -232,6 +233,13 @@ export default function Dashboard() {
   const [prediction, setPrediction] = useState<PredictionResponse | null>(null);
   const [predicting, setPredicting] = useState(false);
   const [predictionError, setPredictionError] = useState<string | null>(null);
+  const [scenarioSummary, setScenarioSummary] = useState<ScenarioSummaryResponse | null>(null);
+  const [scenarioLoading, setScenarioLoading] = useState(false);
+  const [scenarioError, setScenarioError] = useState<string | null>(null);
+  const [scenarioN, setScenarioN] = useState(50);
+  const [scenarioSeed, setScenarioSeed] = useState(42);
+  const [scenarioStratified, setScenarioStratified] = useState(true);
+  const [scenarioAllModels, setScenarioAllModels] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
@@ -290,6 +298,25 @@ export default function Dashboard() {
     }
   }
 
+  async function handleScenarioRun() {
+    setScenarioLoading(true);
+    setScenarioError(null);
+    try {
+      const result = await api.getScenarioSummary({
+        modelName: selectedModel,
+        allModels: scenarioAllModels,
+        n: scenarioN,
+        seed: scenarioSeed,
+        stratified: scenarioStratified,
+      });
+      setScenarioSummary(result);
+    } catch (error) {
+      setScenarioError(getErrorMessage(error));
+    } finally {
+      setScenarioLoading(false);
+    }
+  }
+
   function handleFeatureChange(name: string, value: string) {
     setPrediction(null);
     setPredictionError(null);
@@ -336,7 +363,7 @@ export default function Dashboard() {
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="space-y-1">
               <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.32em] text-cyan-500">
-                // INSIDER THREAT DETECTION
+                {"// INSIDER THREAT DETECTION"}
               </p>
               <h1 className="font-mono text-xl font-black tracking-tight text-slate-100 sm:text-2xl">
                 THREAT INTELLIGENCE CENTER
@@ -428,6 +455,160 @@ export default function Dashboard() {
           })}
         </section>
 
+        {/* ── Scenario sample summary ─────────────────────────── */}
+        <section className="rounded-sm border border-slate-600/40 bg-slate-800 shadow-[0_2px_20px_rgba(0,0,0,0.4)]">
+          <div className="border-b border-slate-600/40 px-5 py-4">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+              <div>
+                <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-cyan-500/70">
+                  {"// SCENARIO TEST SUMMARY"}
+                </p>
+                <h2 className="mt-0.5 font-mono text-sm font-bold text-slate-100">
+                  Seeded Dataset Evaluation
+                </h2>
+                <p className="mt-0.5 font-mono text-[10px] text-slate-400">
+                  Runs the backend sample endpoint and returns TP / TN / FP / FN counts.
+                </p>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-[110px_110px_1fr_auto] xl:min-w-[620px]">
+                <label className="font-mono text-[9px] uppercase tracking-widest text-slate-400">
+                  Rows
+                  <input
+                    type="number"
+                    min={1}
+                    value={scenarioN}
+                    onChange={(event) => setScenarioN(Math.max(1, Number(event.target.value) || 1))}
+                    className="mt-1 w-full rounded-sm border border-slate-600 bg-slate-900 px-2 py-1.5 font-mono text-xs text-slate-100 outline-none focus:border-cyan-500/50"
+                  />
+                </label>
+                <label className="font-mono text-[9px] uppercase tracking-widest text-slate-400">
+                  Seed
+                  <input
+                    type="number"
+                    value={scenarioSeed}
+                    onChange={(event) => setScenarioSeed(Number(event.target.value) || 0)}
+                    className="mt-1 w-full rounded-sm border border-slate-600 bg-slate-900 px-2 py-1.5 font-mono text-xs text-slate-100 outline-none focus:border-cyan-500/50"
+                  />
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex items-center gap-2 rounded-sm border border-slate-600/50 bg-slate-700/40 px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={scenarioStratified}
+                      onChange={(event) => setScenarioStratified(event.target.checked)}
+                      className="h-3.5 w-3.5 accent-cyan-500"
+                    />
+                    Stratified
+                  </label>
+                  <label className="flex items-center gap-2 rounded-sm border border-slate-600/50 bg-slate-700/40 px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={scenarioAllModels}
+                      onChange={(event) => setScenarioAllModels(event.target.checked)}
+                      className="h-3.5 w-3.5 accent-cyan-500"
+                    />
+                    All Models
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleScenarioRun}
+                  disabled={scenarioLoading}
+                  className="rounded-sm border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 font-mono text-xs font-black uppercase tracking-widest text-cyan-400 transition hover:border-cyan-400/60 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {scenarioLoading ? "RUNNING..." : "RUN TEST"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-5">
+            {scenarioError ? (
+              <div className="rounded-sm border border-red-500/30 bg-red-950/30 px-4 py-3 font-mono text-xs text-red-400">
+                <span className="font-bold">[ERR]</span> {scenarioError}
+              </div>
+            ) : null}
+
+            {scenarioSummary ? (
+              <div className="space-y-4">
+                <div className="grid gap-3 text-sm sm:grid-cols-3">
+                  <div className="rounded-sm border border-slate-600/30 bg-slate-700/40 p-3">
+                    <p className="font-mono text-[9px] uppercase tracking-widest text-slate-400">
+                      Sampled Rows
+                    </p>
+                    <p className="mt-1.5 font-mono text-2xl font-black text-slate-100">
+                      {formatNumber(scenarioSummary.sampled_records)}
+                    </p>
+                  </div>
+                  <div className="rounded-sm border border-red-500/20 bg-red-950/20 p-3">
+                    <p className="font-mono text-[9px] uppercase tracking-widest text-red-500/70">
+                      Malicious
+                    </p>
+                    <p className="mt-1.5 font-mono text-2xl font-black text-red-400">
+                      {formatNumber(scenarioSummary.sample.malicious)}
+                    </p>
+                  </div>
+                  <div className="rounded-sm border border-emerald-500/20 bg-emerald-950/20 p-3">
+                    <p className="font-mono text-[9px] uppercase tracking-widest text-emerald-500/70">
+                      Benign
+                    </p>
+                    <p className="mt-1.5 font-mono text-2xl font-black text-emerald-400">
+                      {formatNumber(scenarioSummary.sample.benign)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto rounded-sm border border-slate-600/40">
+                  <table className="w-full min-w-[640px] border-collapse font-mono text-xs">
+                    <thead className="bg-slate-700/80 text-[9px] uppercase tracking-widest text-slate-400">
+                      <tr>
+                        <th className="border-b border-slate-600/40 px-3 py-2 text-left">Model</th>
+                        <th className="border-b border-slate-600/40 px-3 py-2 text-right">TP</th>
+                        <th className="border-b border-slate-600/40 px-3 py-2 text-right">TN</th>
+                        <th className="border-b border-slate-600/40 px-3 py-2 text-right">FP</th>
+                        <th className="border-b border-slate-600/40 px-3 py-2 text-right">FN</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {MODEL_NAMES.filter((modelName) => scenarioSummary.results[modelName]).map((modelName) => {
+                        const result = scenarioSummary.results[modelName]!;
+                        return (
+                          <tr key={modelName} className="border-b border-slate-600/30 last:border-b-0">
+                            <td className="px-3 py-2 font-bold text-slate-100">
+                              {MODEL_LABELS[modelName]}
+                            </td>
+                            <td className="px-3 py-2 text-right text-cyan-400">
+                              {formatNumber(result.true_positives)}
+                            </td>
+                            <td className="px-3 py-2 text-right text-emerald-400">
+                              {formatNumber(result.true_negatives)}
+                            </td>
+                            <td className="px-3 py-2 text-right text-amber-400">
+                              {formatNumber(result.false_positives)}
+                            </td>
+                            <td className="px-3 py-2 text-right text-red-400">
+                              {formatNumber(result.false_negatives)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <p className="truncate font-mono text-[10px] text-slate-500">
+                  DATASET :: {scenarioSummary.dataset_path}
+                </p>
+              </div>
+            ) : (
+              <p className="font-mono text-xs text-slate-500">
+                Run a scenario test to populate the sampled confusion matrix.
+              </p>
+            )}
+          </div>
+        </section>
+
         {/* ── Details + Prediction ─────────────────────────────── */}
         <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
 
@@ -437,7 +618,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-cyan-500/70">
-                    // PERFORMANCE REPORT
+                    {"// PERFORMANCE REPORT"}
                   </p>
                   <h2 className="mt-0.5 font-mono text-sm font-bold text-slate-100">
                     {MODEL_LABELS[selectedModel]}
@@ -479,7 +660,7 @@ export default function Dashboard() {
               {/* Confusion Matrix */}
               <div>
                 <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-slate-400 mb-3">
-                  // DETECTION MATRIX
+                  {"// DETECTION MATRIX"}
                 </p>
                 <div className="grid grid-cols-2 overflow-hidden rounded-sm border border-slate-600/40 text-center text-sm">
                   <div className="border-b border-r border-slate-600/40 bg-emerald-950/30 p-4">
@@ -521,7 +702,7 @@ export default function Dashboard() {
           <article className="rounded-sm border border-slate-600/40 bg-slate-800 shadow-[0_2px_20px_rgba(0,0,0,0.4)]">
             <div className="border-b border-slate-600/40 px-5 py-4">
               <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-cyan-500/70">
-                // BEHAVIORAL THREAT ANALYZER
+                {"// BEHAVIORAL THREAT ANALYZER"}
               </p>
               <h2 className="mt-0.5 font-mono text-sm font-bold text-slate-100">
                 Prediction Test
@@ -587,7 +768,7 @@ export default function Dashboard() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-slate-400">
-                      // CSV Input Terminal
+                      {"// CSV Input Terminal"}
                     </p>
                     <p className="mt-1 font-mono text-[10px] text-slate-500">
                       Use training column headers. First data row fills the form.
@@ -646,7 +827,7 @@ export default function Dashboard() {
                   >
                     <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-current to-transparent opacity-40" />
                     <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-slate-400 mb-3">
-                      // THREAT ASSESSMENT RESULT
+                      {"// THREAT ASSESSMENT RESULT"}
                     </p>
                     <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                       <div>
@@ -696,7 +877,7 @@ export default function Dashboard() {
                       <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                         <div>
                           <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-cyan-500/70">
-                            // BEHAVIORAL INDICATORS
+                            {"// BEHAVIORAL INDICATORS"}
                           </p>
                           <p className="mt-0.5 font-mono text-[10px] text-slate-400">
                             SHAP contribution analysis — strongest drivers ranked.
@@ -730,7 +911,7 @@ export default function Dashboard() {
                       {/* Contribution details */}
                       <div>
                         <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-slate-400 mb-3">
-                          // CONTRIBUTION DETAILS
+                          {"// CONTRIBUTION DETAILS"}
                         </p>
                         <div className="space-y-2">
                           {prediction.explanation.top_contributions.map((c) => (

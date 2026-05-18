@@ -86,6 +86,35 @@ export type DefaultModelStatusResponse = {
   model_name: string | null;
 };
 
+export type ScenarioSummaryCounts = {
+  model_path: string;
+  true_positives: number;
+  true_negatives: number;
+  false_positives: number;
+  false_negatives: number;
+};
+
+export type ScenarioSummaryResponse = {
+  dataset_path: string;
+  seed: number;
+  stratified: boolean;
+  requested_records: number;
+  sampled_records: number;
+  sample: {
+    malicious: number;
+    benign: number;
+  };
+  results: Partial<Record<ModelName, ScenarioSummaryCounts>>;
+};
+
+export type ScenarioSummaryParams = {
+  modelName?: ModelName;
+  allModels?: boolean;
+  n?: number;
+  seed?: number;
+  stratified?: boolean;
+};
+
 type ApiErrorBody = {
   detail?: string;
 };
@@ -184,10 +213,34 @@ export function predictModel(
     });
 }
 
+export function getScenarioSummary(
+  params: ScenarioSummaryParams = {},
+): Promise<ScenarioSummaryResponse> {
+  const query = new URLSearchParams();
+
+  if (params.modelName) query.set("model_name", params.modelName);
+  if (params.allModels !== undefined) query.set("all_models", String(params.allModels));
+  if (params.n !== undefined) query.set("n", String(params.n));
+  if (params.seed !== undefined) query.set("seed", String(params.seed));
+  if (params.stratified !== undefined) query.set("stratified", String(params.stratified));
+
+  const queryString = query.toString();
+
+  return apiClient
+    .get<ScenarioSummaryResponse>(
+      `/scenario-tests/summary${queryString ? `?${queryString}` : ""}`,
+    )
+    .then((response) => response.data)
+    .catch((error: unknown) => {
+      throw toApiError(error);
+    });
+}
+
 export const api = {
   getDefaultModelStatus,
   getModelsStatus,
   getModelMetrics,
+  getScenarioSummary,
   predictDefaultModel,
   predictModel,
 };

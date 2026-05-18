@@ -129,6 +129,7 @@ def confusion_summary(results: list[dict]) -> dict[str, int]:
     counts = Counter(r["outcome"] for r in results)
     return {
         "true_positives": counts["TP"],
+        "true_negatives": counts["TN"],
         "false_positives": counts["FP"],
         "false_negatives": counts["FN"],
     }
@@ -142,6 +143,7 @@ def print_report(model_name: str, results: list[dict]):
     _sep("=")
     print()
     print(f"  True positives  : {summary['true_positives']:>5}")
+    print(f"  True negatives  : {summary['true_negatives']:>5}")
     print(f"  False positives : {summary['false_positives']:>5}")
     print(f"  False negatives : {summary['false_negatives']:>5}")
     print()
@@ -154,13 +156,14 @@ def _summary_row(results: list[dict], model_name: str) -> dict:
     return {
         "model": model_name,
         "true_positives": summary["true_positives"],
+        "true_negatives": summary["true_negatives"],
         "false_positives": summary["false_positives"],
         "false_negatives": summary["false_negatives"],
     }
 
 
 def export_csv(results: list[dict], model_name: str, output_path: Path):
-    fieldnames = ["model", "true_positives", "false_positives", "false_negatives"]
+    fieldnames = ["model", "true_positives", "true_negatives", "false_positives", "false_negatives"]
     with output_path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames)
         writer.writeheader()
@@ -173,11 +176,12 @@ def export_markdown(results: list[dict], model_name: str, output_path: Path):
     lines = [
         "# Scenario Test Summary",
         "",
-        "| Model | True positives | False positives | False negatives |",
-        "|---|---:|---:|---:|",
+        "| Model | True positives | True negatives | False positives | False negatives |",
+        "|---|---:|---:|---:|---:|",
         (
             f"| {row['model']} | {row['true_positives']} | "
-            f"{row['false_positives']} | {row['false_negatives']} |"
+            f"{row['true_negatives']} | {row['false_positives']} | "
+            f"{row['false_negatives']} |"
         ),
         "",
     ]

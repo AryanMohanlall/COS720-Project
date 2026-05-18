@@ -1,12 +1,14 @@
+import csv
 import json
 import os
+import random
 import warnings
 from pathlib import Path
 from typing import Any
 
 import joblib
 import numpy as np
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -33,6 +35,8 @@ METRIC_FILES = {
     "lightgbm": "lightgbm_metrics.json",
     "random_forest": "random_forest_metrics.json",
 }
+TARGET_COLUMN = "is_malicious"
+DATASET_FILENAME = "insider_threat_clean_dataset.csv"
 MODEL_ALIASES = {
     "xgb": "xgboost",
     "xgboost": "xgboost",
@@ -53,6 +57,11 @@ DEFAULT_MODEL_CANDIDATES = [
     APP_DIR.parent / "ml" / "models" / "xgboost_model.joblib",
     APP_DIR.parent / "ml" / "models" / "lightgbm_model.joblib",
     APP_DIR.parent / "ml" / "models" / "random_forest_model.joblib",
+]
+DATASET_CANDIDATES = [
+    APP_DIR / "artifacts" / "data" / DATASET_FILENAME,
+    APP_DIR.parent / "artifacts" / "data" / DATASET_FILENAME,
+    APP_DIR.parent / "ml" / "data" / DATASET_FILENAME,
 ]
 MODEL_PATH = Path(os.getenv("MODEL_PATH", "")).expanduser() if os.getenv("MODEL_PATH") else None
 
@@ -140,6 +149,14 @@ def resolve_metrics_path(model_name: str) -> Path:
             return candidate
 
     return candidates[-1]
+
+
+def resolve_dataset_path() -> Path:
+    for candidate in DATASET_CANDIDATES:
+        if candidate.exists():
+            return candidate
+
+    return DATASET_CANDIDATES[-1]
 
 
 def load_model_bundle() -> dict[str, Any]:
@@ -387,6 +404,97 @@ def run_prediction(bundle: dict[str, Any], path: Path | None, request: Predictio
     }
 
 
+def load_scenario_dataset() -> list[dict[str, str]]:
+    path = resolve_dataset_path()
+    if not path.exists():
+        raise HTTPException(
+            status_code=503,
+            detail=f"Scenario dataset not found at {path}.",
+        )
+
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        return list(csv.DictReader(handle))
+
+
+def sample_scenario_records(
+    rows: list[dict[str, str]],
+    n: int,
+    stratified: bool,
+    rng: random.Random,
+) -> list[dict[str, str]]:
+    if not rows:
+        return []
+
+    if stratified:
+        positives = [row for row in rows if row[TARGET_COLUMN] == "1"]
+        negatives = [row for row in rows if row[TARGET_COLUMN] == "0"]
+        n_pos = max(1, n // 4)
+        n_neg = n - n_pos
+        sample = (
+            rng.sample(positives, min(n_pos, len(positives)))
+            + rng.sample(negatives, min(n_neg, len(negatives)))
+        )
+        rng.shuffle(sample)
+        return sample
+
+    return rng.sample(rows, min(n, len(rows)))
+
+
+def scenario_row_to_features(row: dict[str, str], bundle: dict[str, Any]) -> dict[str, Any]:
+    numeric_columns = set(bundle.get("numeric_columns", []))
+    constant_columns = set(bundle.get("constant_columns", []))
+
+    return {
+        column: parse_feature_value(column, value, numeric_columns)
+        for column, value in row.items()
+        if column != TARGET_COLUMN and column not in constant_columns
+    }
+
+
+def scenario_outcome(prediction: int, actual: int) -> str:
+    if prediction == 1 and actual == 1:
+        return "TP"
+    if prediction == 0 and actual == 0:
+        return "TN"
+    if prediction == 1 and actual == 0:
+        return "FP"
+    return "FN"
+
+
+def run_scenario_summary(bundle: dict[str, Any], rows: list[dict[str, str]]) -> dict[str, int]:
+    counts = {
+        "true_positives": 0,
+        "true_negatives": 0,
+        "false_positives": 0,
+        "false_negatives": 0,
+    }
+    threshold = float(bundle.get("decision_threshold", 0.5))
+
+    for row in rows:
+        actual = int(float(row[TARGET_COLUMN]))
+        features = scenario_row_to_features(row, bundle)
+        vectorized = bundle["vectorizer"].transform([features])
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="X does not have valid feature names, but .* was fitted with feature names",
+                category=UserWarning,
+            )
+            probability = float(bundle["model"].predict_proba(vectorized)[0, 1])
+
+        outcome = scenario_outcome(int(probability >= threshold), actual)
+        if outcome == "TP":
+            counts["true_positives"] += 1
+        elif outcome == "TN":
+            counts["true_negatives"] += 1
+        elif outcome == "FP":
+            counts["false_positives"] += 1
+        else:
+            counts["false_negatives"] += 1
+
+    return counts
+
+
 @app.get("/")
 async def root():
     return {"message": "Backend API is running"}
@@ -415,6 +523,43 @@ async def models_status():
             "loaded": model_name in model_bundles_by_name,
         }
         for model_name in MODEL_FILES
+    }
+
+
+@app.get("/scenario-tests/summary")
+async def scenario_tests_summary(
+    model_name: str = Query("xgboost", description="Model to evaluate when all_models is false."),
+    all_models: bool = Query(False, description="Evaluate all supported models on the same sample."),
+    n: int = Query(50, ge=1, description="Number of dataset rows to sample."),
+    seed: int = Query(42, description="Random seed used for deterministic sampling."),
+    stratified: bool = Query(True, description="Sample roughly 25% malicious rows when possible."),
+):
+    rows = load_scenario_dataset()
+    rng = random.Random(seed)
+    np.random.seed(seed)
+    sample = sample_scenario_records(rows, n, stratified, rng)
+    model_names = list(MODEL_FILES) if all_models else [normalize_model_name(model_name)]
+
+    summaries = {}
+    for name in model_names:
+        bundle, path = load_named_model_bundle(name)
+        summaries[name] = {
+            "model_path": str(path),
+            **run_scenario_summary(bundle, sample),
+        }
+
+    malicious_count = sum(1 for row in sample if row[TARGET_COLUMN] == "1")
+    return {
+        "dataset_path": str(resolve_dataset_path()),
+        "seed": seed,
+        "stratified": stratified,
+        "requested_records": n,
+        "sampled_records": len(sample),
+        "sample": {
+            "malicious": malicious_count,
+            "benign": len(sample) - malicious_count,
+        },
+        "results": summaries,
     }
 
 

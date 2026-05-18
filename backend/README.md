@@ -10,6 +10,7 @@ Useful endpoints:
 - `GET /model/status` checks the configured default artifact path.
 - `GET /models/status` checks all supported model artifacts and metric reports.
 - `GET /metrics/{model_name}` returns the saved metrics report for a model.
+- `GET /scenario-tests/summary` samples the scenario dataset and returns TP/TN/FP/FN counts.
 - `POST /predict` predicts with the default configured model.
 - `POST /predict/{model_name}` predicts with a specific model.
 
@@ -22,3 +23,11 @@ Supported `model_name` values:
 Prediction endpoints accept `{"features": {...}}` using the raw training column names.
 Prediction responses include a SHAP explanation with the top raw feature
 contributions for the selected model.
+
+Example scenario summary request:
+
+```bash
+curl "http://localhost:8000/scenario-tests/summary?n=100&model_name=xgboost&seed=42"
+```
+
+Use `all_models=true` to evaluate all supported models on the same seeded sample.
