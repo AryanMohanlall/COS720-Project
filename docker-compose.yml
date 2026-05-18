@@ -7,7 +7,7 @@ services:
     environment:
       - ENVIRONMENT=production
     volumes:
-      - ./artifacts:/app/artifacts:ro
+      - ./artifacts/models:/app/artifacts/models:ro
       - ./ml/data:/app/artifacts/data:ro
       - ./ml/reports:/app/reports:ro
 

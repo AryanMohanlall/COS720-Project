@@ -597,6 +597,76 @@ export default function Dashboard() {
                   </table>
                 </div>
 
+                {/* Per-model confusion matrices */}
+                <div>
+                  <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-slate-400 mb-3">
+                    {"// CONFUSION MATRICES"}
+                  </p>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {MODEL_NAMES.filter((modelName) => scenarioSummary.results[modelName]).map((modelName) => {
+                      const result = scenarioSummary.results[modelName]!;
+                      return (
+                        <div key={modelName}>
+                          <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-slate-300">
+                            {MODEL_LABELS[modelName]}
+                          </p>
+                          {/* Axis labels + matrix */}
+                          <div className="grid grid-cols-[auto_1fr] gap-x-1.5 gap-y-0">
+                            {/* Spacer above "Predicted" header */}
+                            <div />
+                            <div className="mb-1 text-center font-mono text-[8px] uppercase tracking-widest text-slate-500">
+                              Predicted
+                            </div>
+                            {/* "Actual" label rotated */}
+                            <div className="flex items-center justify-center">
+                              <span
+                                className="font-mono text-[8px] uppercase tracking-widest text-slate-500"
+                                style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+                              >
+                                Actual
+                              </span>
+                            </div>
+                            <div>
+                              {/* Column sub-headers */}
+                              <div className="grid grid-cols-2 mb-0.5 gap-0.5">
+                                <p className="text-center font-mono text-[8px] uppercase tracking-widest text-slate-500">Benign</p>
+                                <p className="text-center font-mono text-[8px] uppercase tracking-widest text-slate-500">Malicious</p>
+                              </div>
+                              {/* 2×2 cells */}
+                              <div className="grid grid-cols-2 overflow-hidden rounded-sm border border-slate-600/40 text-center">
+                                <div className="border-b border-r border-slate-600/40 bg-emerald-950/30 p-3">
+                                  <p className="font-mono text-[8px] uppercase tracking-widest text-emerald-500/70">TN</p>
+                                  <p className="mt-1 font-mono text-lg font-black text-emerald-400">
+                                    {formatNumber(result.true_negatives)}
+                                  </p>
+                                </div>
+                                <div className="border-b border-slate-600/40 bg-amber-950/20 p-3">
+                                  <p className="font-mono text-[8px] uppercase tracking-widest text-amber-500/70">FP</p>
+                                  <p className="mt-1 font-mono text-lg font-black text-amber-400">
+                                    {formatNumber(result.false_positives)}
+                                  </p>
+                                </div>
+                                <div className="border-r border-slate-600/40 bg-red-950/30 p-3">
+                                  <p className="font-mono text-[8px] uppercase tracking-widest text-red-500/70">FN</p>
+                                  <p className="mt-1 font-mono text-lg font-black text-red-400">
+                                    {formatNumber(result.false_negatives)}
+                                  </p>
+                                </div>
+                                <div className="bg-cyan-950/20 p-3">
+                                  <p className="font-mono text-[8px] uppercase tracking-widest text-cyan-500/70">TP</p>
+                                  <p className="mt-1 font-mono text-lg font-black text-cyan-400">
+                                    {formatNumber(result.true_positives)}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <p className="truncate font-mono text-[10px] text-slate-500">
                   DATASET :: {scenarioSummary.dataset_path}
                 </p>
