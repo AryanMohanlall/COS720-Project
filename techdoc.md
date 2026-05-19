@@ -47,7 +47,6 @@ The dataset is a cleaned insider-threat CSV with 118,614 records and a 5.38% pos
 | xgboost | ≥ 2.0 |
 | lightgbm | ≥ 4.0 |
 | shap | ≥ 0.46 |
-| matplotlib | ≥ 3.7 |
 | optuna | ≥ 3.0 |
 
 **Frontend dependencies** (`frontend/itd/package.json`):

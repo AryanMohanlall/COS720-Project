@@ -2,12 +2,10 @@
 shap_analysis.py — Global SHAP explainability analysis for trained insider threat classifiers.
 
 Produces (in ml/reports/):
-    <model>_shap_bar.png        Mean |SHAP| per raw feature — global importance ranking
-    <model>_shap_beeswarm.png   SHAP value distribution — direction and magnitude per feature
     <model>_shap_summary.json   Ranked per-feature SHAP statistics (mean, std, mean abs)
 
 The DictVectorizer one-hot encodes categorical features, so encoded column SHAPs are summed
-back to raw-feature level before plotting (e.g. all employee_department=* columns → one bar).
+back to raw-feature level before reporting.
 
 Usage:
     python shap_analysis.py --model xgboost
@@ -21,10 +19,6 @@ import warnings
 from pathlib import Path
 
 import joblib
-import matplotlib
-
-matplotlib.use("Agg")  # non-interactive backend; must precede pyplot import
-import matplotlib.pyplot as plt
 import numpy as np
 import shap
 from sklearn.model_selection import train_test_split
@@ -42,7 +36,7 @@ MODEL_FILENAMES = {
     "random_forest": "random_forest_model.joblib",
 }
 
-# Human-readable labels for plots and JSON output
+# Human-readable labels for JSON output
 FEATURE_LABELS: dict[str, str] = {
     "employee_department": "Department",
     "employee_campus": "Campus",
@@ -101,23 +95,6 @@ def aggregate_shap_to_raw(
     return agg, raw_features
 
 
-def build_numeric_value_matrix(
-    X_test_raw: list[dict],
-    raw_features: list[str],
-) -> np.ndarray:
-    """Extract numeric feature values for beeswarm colour coding.
-
-    Categorical features are left as 0.0 (no meaningful ordinal ordering).
-    """
-    matrix = np.zeros((len(X_test_raw), len(raw_features)), dtype=float)
-    for j, feat in enumerate(raw_features):
-        for i, row in enumerate(X_test_raw):
-            val = row.get(feat)
-            if isinstance(val, (int, float)) and val is not None:
-                matrix[i, j] = float(val)
-    return matrix
-
-
 def extract_shap_array(sv_raw) -> np.ndarray:
     """Normalise the various shapes TreeExplainer can return into (n_samples, n_features)."""
     if isinstance(sv_raw, list):
@@ -171,119 +148,6 @@ def compute_shap_values(model, X_test: np.ndarray) -> np.ndarray:
     return extract_shap_array(sv_raw)
 
 
-# ── Plotting ──────────────────────────────────────────────────────────────────
-
-
-def plot_bar(
-    mean_abs_shap: dict[str, float],
-    model_label: str,
-    out_path: Path,
-) -> None:
-    """Horizontal bar chart: mean |SHAP value| per raw feature, ranked descending."""
-    ranked_feats = sorted(mean_abs_shap, key=mean_abs_shap.get, reverse=True)
-    values = [mean_abs_shap[f] for f in ranked_feats]
-    labels = [FEATURE_LABELS.get(f, f) for f in ranked_feats]
-
-    fig, ax = plt.subplots(figsize=(8, max(5, len(ranked_feats) * 0.38)))
-    ax.barh(range(len(ranked_feats)), values, color="#2563eb", edgecolor="none", height=0.65)
-    ax.set_yticks(range(len(ranked_feats)))
-    ax.set_yticklabels(labels, fontsize=9)
-    ax.invert_yaxis()
-    ax.set_xlabel("Mean |SHAP value| — average impact on model output", fontsize=9)
-    ax.set_title(
-        f"{model_label} — Global Feature Importance (SHAP)",
-        fontsize=11,
-        fontweight="bold",
-        pad=10,
-    )
-    ax.spines[["top", "right"]].set_visible(False)
-    ax.tick_params(axis="x", labelsize=8)
-    ax.axvline(0, color="black", linewidth=0.6)
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"  Bar chart  → {out_path}")
-
-
-def plot_beeswarm(
-    agg_shap: np.ndarray,
-    feature_vals: np.ndarray,
-    raw_features: list[str],
-    mean_abs_shap: dict[str, float],
-    model_label: str,
-    out_path: Path,
-) -> None:
-    """Beeswarm plot: one dot per test sample per feature.
-
-    Dots are coloured by normalised feature value (blue=low, red=high).
-    Features are ordered top→bottom by mean |SHAP|.
-    Positive x → pushes prediction toward malicious; negative → away.
-    """
-    order = sorted(
-        range(len(raw_features)),
-        key=lambda j: mean_abs_shap[raw_features[j]],
-        reverse=True,
-    )
-    sorted_feats = [raw_features[j] for j in order]
-    sorted_labels = [FEATURE_LABELS.get(f, f) for f in sorted_feats]
-    sorted_shap = agg_shap[:, order]
-    sorted_vals = feature_vals[:, order]
-
-    n_features = len(sorted_feats)
-    fig, ax = plt.subplots(figsize=(9, max(5, n_features * 0.42)))
-    cmap = plt.get_cmap("RdBu_r")  # blue = low feature value, red = high
-
-    rng = np.random.default_rng(42)
-    for j in range(n_features):
-        y_base = n_features - 1 - j  # top = most important
-        shap_col = sorted_shap[:, j]
-        val_col = sorted_vals[:, j]
-
-        v_min, v_max = val_col.min(), val_col.max()
-        normed = (
-            (val_col - v_min) / (v_max - v_min)
-            if v_max > v_min
-            else np.full_like(val_col, 0.5)
-        )
-
-        y_jitter = rng.uniform(-0.32, 0.32, size=len(shap_col))
-        ax.scatter(
-            shap_col,
-            y_base + y_jitter,
-            c=cmap(normed),
-            alpha=0.35,
-            s=6,
-            linewidths=0,
-            rasterized=True,
-        )
-
-    ax.axvline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
-    ax.set_yticks(range(n_features))
-    ax.set_yticklabels(reversed(sorted_labels), fontsize=9)
-    ax.set_xlabel("SHAP value  (positive → increases risk score)", fontsize=9)
-    ax.set_title(
-        f"{model_label} — SHAP Value Distribution per Feature",
-        fontsize=11,
-        fontweight="bold",
-        pad=10,
-    )
-    ax.spines[["top", "right"]].set_visible(False)
-    ax.tick_params(axis="x", labelsize=8)
-
-    sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(0, 1))
-    sm.set_array([])
-    cbar = fig.colorbar(sm, ax=ax, pad=0.02, fraction=0.018, aspect=30)
-    cbar.set_ticks([0, 1])
-    cbar.set_ticklabels(["Low", "High"])
-    cbar.ax.set_ylabel("Feature value", fontsize=7, rotation=270, labelpad=14)
-    cbar.ax.tick_params(labelsize=7)
-
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"  Beeswarm   → {out_path}")
-
-
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 
@@ -291,7 +155,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Compute global SHAP explanations for a trained insider threat classifier "
-            "and save bar chart, beeswarm plot, and JSON summary to ml/reports/."
+            "and save a JSON summary to ml/reports/."
         )
     )
     parser.add_argument(
@@ -344,7 +208,6 @@ def main() -> None:
     model = payload["model"]
     vectorizer = payload["vectorizer"]
     model_name: str = payload.get("model_name", args.model)
-    model_label = model_name.upper().replace("_", " ")
 
     # ── Recreate identical test split ────────────────────────────────────────
     print("Preparing test set (same split as training: test_size=0.2, random_state=42)...")
@@ -379,7 +242,6 @@ def main() -> None:
     # ── Aggregate encoded columns → raw features ─────────────────────────────
     groups = build_feature_groups(vectorizer)
     agg_shap, raw_features = aggregate_shap_to_raw(sv, groups)
-    feature_vals = build_numeric_value_matrix(X_test_raw, raw_features)
 
     feat_idx = {f: j for j, f in enumerate(raw_features)}
     mean_abs_shap = {f: float(np.abs(agg_shap[:, feat_idx[f]]).mean()) for f in raw_features}
@@ -427,22 +289,6 @@ def main() -> None:
     with json_path.open("w", encoding="utf-8") as fh:
         json.dump(summary, fh, indent=2)
     print(f"\n  JSON summary → {json_path}")
-
-    # ── Generate plots ───────────────────────────────────────────────────────
-    print("Generating plots...")
-    plot_bar(
-        mean_abs_shap,
-        model_label,
-        REPORTS_DIR / f"{model_name}_shap_bar.png",
-    )
-    plot_beeswarm(
-        agg_shap,
-        feature_vals,
-        raw_features,
-        mean_abs_shap,
-        model_label,
-        REPORTS_DIR / f"{model_name}_shap_beeswarm.png",
-    )
 
     print("\nDone.\n")
 
