@@ -12,7 +12,43 @@ The system consists of three main components:
 
 **ML pipeline** — An offline training pipeline of Python scripts that preprocesses the dataset, tunes hyperparameters with Optuna, trains three classifiers (XGBoost, LightGBM, Random Forest), selects a decision threshold targeting 99% recall, and saves each trained model as a self-contained `.joblib` artefact.
 
-The dataset is a cleaned insider-threat CSV with 118,614 records and a 5.38% positive (malicious) rate. The 21 input features cover employee demographics, access behaviour, printing activity, file-burning activity, travel records, and physical entry patterns.
+The prescribed dataset is the *Insider Threat Dataset for Corporate Environments* from Kaggle, with 118,614 employee-day records, 21 behavioural and contextual source features, and an `is_malicious` ground-truth label. After preprocessing, `late_exit_flag` is removed as a zero-variance feature, leaving 20 raw features that expand to 110 encoded columns through one-hot encoding.
+
+### Feature selection and behavioural coverage
+
+The retained features cover the required behavioural-indicator categories:
+
+| Category | Retained features | Relevance |
+|---|---|---|
+| Login time patterns | `entry_during_weekend`, `num_printed_pages_off_hours` | Weekend access and after-hours printing indicate activity outside normal working patterns. |
+| File access activity | `total_files_burned`, `burned_from_other` | Removable-media writes and file burns from other accounts capture exfiltration and privilege misuse. |
+| Privilege usage | `employee_classification`, `employee_position`, `employee_department`, `is_contractor` | Role and access-tier context determines whether the same behaviour is normal or suspicious. |
+| Abnormal access frequency | `num_entries`, `num_unique_campus`, `employee_campus` | Spikes in daily entries or multi-campus movement can indicate reconnaissance or staging. |
+| Data transfer behaviour | `total_printed_pages`, `total_files_burned` | Printing and file burning represent paper and removable-media transfer channels. |
+| Contextual and risk features | `employee_seniority_years`, `employee_origin_country`, `has_foreign_citizenship`, `hostility_country_level`, `is_abroad`, `trip_day_number`, `has_criminal_record`, `has_medical_history` | Tenure, travel, background, and counter-intelligence context support role-relative baselines. |
+
+Permutation importance is computed on the held-out test set (`n=23,723`, 5 repeats, seed 42) by independently shuffling each raw feature group after encoding. The top features are:
+
+| Feature | FN inc. | Recall drop | PR-AUC drop |
+|---|---:|---:|---:|
+| `employee_seniority_years` | +69.0 | 0.054 | 0.117 |
+| `employee_position` | +45.8 | 0.036 | 0.089 |
+| `employee_origin_country` | +39.6 | 0.031 | 0.078 |
+| `employee_classification` | +9.6 | 0.008 | 0.031 |
+| `employee_department` | +8.8 | 0.007 | 0.035 |
+| `employee_campus` | +7.6 | 0.006 | 0.041 |
+| `has_foreign_citizenship` | +1.4 | 0.001 | 0.008 |
+| `is_contractor` | +0.4 | 0.000 | 0.005 |
+| `num_unique_campus` | +0.4 | 0.000 | n/a |
+| `total_files_burned` | n/a | n/a | **0.248** |
+
+The strongest false-negative controls are identity- and role-context features rather than raw behavioural counts. This is expected for insider-threat detection: behaviour becomes meaningful relative to role, access tier, and background context. `total_files_burned` is retained as the dominant precision driver because it causes the largest PR-AUC drop, even though it does not increase false negatives in this permutation run.
+
+### Model selection rationale
+
+Ensemble models are used because insider-threat signals are noisy, non-linear, imbalanced, and mixed-type. Off-hours activity, file burning, and unusual privilege use rarely prove malicious intent in isolation, but become discriminative in combination. Tree ensembles capture those interactions without feature scaling and support class-imbalance handling.
+
+XGBoost is the primary classifier because it gives the best analyst workload trade-off at the tuned high-recall operating point. LightGBM is retained as the closest gradient-boosting comparator, while Random Forest is retained as the bagging-family comparator. XGBoost also has the most mature operational SHAP path in this codebase through native `pred_contribs`.
 
 ---
 
@@ -308,11 +344,11 @@ Each `.joblib` file is a Python dictionary with the following keys:
 
 | Model | Threshold | Accuracy | ROC-AUC | PR-AUC | Precision | Recall | F1 | TP | TN | FP | FN |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| XGBoost | 0.0415 | 88.6% | 98.6% | 86.0% | 32.0% | 98.8% | 48.3% | 1262 | 19760 | 2686 | 15 |
-| LightGBM | 0.0432 | 88.4% | 98.7% | 86.3% | 31.5% | 98.6% | 47.8% | 1259 | 19710 | 2736 | 18 |
-| Random Forest | 0.1524 | 81.6% | 98.5% | 82.8% | 22.5% | 99.0% | 36.6% | 1264 | 18083 | 4363 | 13 |
+| XGBoost | 0.034 | 89.7% | 98.7% | 86.2% | 34.2% | 98.7% | 50.8% | 1260 | 20020 | 2426 | 17 |
+| LightGBM | 0.057 | 89.5% | 98.7% | 86.4% | 33.8% | 98.7% | 50.3% | 1260 | 19975 | 2471 | 17 |
+| Random Forest | 0.141 | 81.4% | 98.5% | 83.6% | 22.3% | 98.9% | 36.4% | 1263 | 18038 | 4408 | 14 |
 
-The low precision and high recall are intentional. The decision threshold is tuned to minimise missed threats (false negatives) at the cost of more false alarms. At the default threshold of 0.5, XGBoost achieves 65.0% precision and 96.7% recall.
+The low precision and high recall are intentional. The decision threshold is tuned to minimise missed threats (false negatives) at the cost of more false alarms. At matched recall, XGBoost produces 2,426 false positives compared with Random Forest's 4,408, a roughly 45% reduction in analyst workload.
 
 ### Training configuration
 
@@ -367,7 +403,7 @@ The low precision and high recall are intentional. The decision threshold is tun
 
 > Screenshots should be captured from a running instance and embedded here. Suggested captures:
 >
-> 1. **Landing page** — the ITD Portal login screen (`http://localhost:3000`).
+> 1. **Dashboard redirect** — the root page immediately redirects to the dashboard (`http://localhost:3000/dashboard`).
 > 2. **Dashboard — model selection** — the three model cards with accuracy, recall, precision, and F1 metrics.
 > 3. **Dashboard — prediction result** — a completed threat assessment showing probability, confidence, and SHAP contribution breakdown for a malicious prediction.
 > 4. **Dashboard — SHAP explanation** — the behavioral indicators panel showing the top risk drivers and their direction.

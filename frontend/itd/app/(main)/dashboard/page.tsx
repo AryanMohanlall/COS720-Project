@@ -41,7 +41,6 @@ const SAMPLE_FEATURES: PredictionFeatures = {
   hostility_country_level: 1,
   num_entries: 4,
   num_unique_campus: 1,
-  late_exit_flag: 0,
   entry_during_weekend: 0,
 };
 
@@ -65,7 +64,6 @@ const FEATURE_FIELDS = [
   { name: "hostility_country_level", label: "Hostility level", type: "number" },
   { name: "num_entries", label: "Entries", type: "number" },
   { name: "num_unique_campus", label: "Unique campuses", type: "number" },
-  { name: "late_exit_flag", label: "Late exit", type: "number" },
   { name: "entry_during_weekend", label: "Weekend entry", type: "number" },
 ] as const;
 
