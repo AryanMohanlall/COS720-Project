@@ -1,0 +1,231 @@
+{
+  "model": "lightgbm",
+  "test_rows": 23723,
+  "positive_count": 1277,
+  "positive_rate": 0.0538,
+  "shap_explainer": "shap.TreeExplainer",
+  "shap_output": "log-odds space for gradient-boosted models; probability space for Random Forest",
+  "aggregation": "encoded columns for each raw feature are summed; sign is preserved (positive SHAP \u2192 pushes toward malicious)",
+  "features_ranked": [
+    {
+      "rank": 1,
+      "feature": "employee_position",
+      "label": "Position",
+      "encoded_columns": 48,
+      "mean_abs_shap": 0.948896,
+      "mean_shap": 0.010295,
+      "std_shap": 1.204842,
+      "max_shap": 4.113139,
+      "min_shap": -3.369504
+    },
+    {
+      "rank": 2,
+      "feature": "employee_origin_country",
+      "label": "Origin country",
+      "encoded_columns": 32,
+      "mean_abs_shap": 0.707409,
+      "mean_shap": -0.001526,
+      "std_shap": 0.888255,
+      "max_shap": 3.94814,
+      "min_shap": -2.978619
+    },
+    {
+      "rank": 3,
+      "feature": "employee_seniority_years",
+      "label": "Seniority (yrs)",
+      "encoded_columns": 1,
+      "mean_abs_shap": 0.705131,
+      "mean_shap": 0.011544,
+      "std_shap": 0.934442,
+      "max_shap": 3.789399,
+      "min_shap": -4.513404
+    },
+    {
+      "rank": 4,
+      "feature": "total_files_burned",
+      "label": "Files burned",
+      "encoded_columns": 1,
+      "mean_abs_shap": 0.453094,
+      "mean_shap": -0.021746,
+      "std_shap": 0.951066,
+      "max_shap": 6.392307,
+      "min_shap": -2.724294
+    },
+    {
+      "rank": 5,
+      "feature": "employee_department",
+      "label": "Department",
+      "encoded_columns": 11,
+      "mean_abs_shap": 0.356353,
+      "mean_shap": 0.06921,
+      "std_shap": 0.478298,
+      "max_shap": 2.176092,
+      "min_shap": -2.629715
+    },
+    {
+      "rank": 6,
+      "feature": "employee_campus",
+      "label": "Campus",
+      "encoded_columns": 3,
+      "mean_abs_shap": 0.326966,
+      "mean_shap": 0.00365,
+      "std_shap": 0.411434,
+      "max_shap": 1.729663,
+      "min_shap": -1.730778
+    },
+    {
+      "rank": 7,
+      "feature": "total_printed_pages",
+      "label": "Pages printed",
+      "encoded_columns": 1,
+      "mean_abs_shap": 0.319745,
+      "mean_shap": -0.073798,
+      "std_shap": 0.448678,
+      "max_shap": 4.516734,
+      "min_shap": -2.338412
+    },
+    {
+      "rank": 8,
+      "feature": "employee_classification",
+      "label": "Classification",
+      "encoded_columns": 1,
+      "mean_abs_shap": 0.269631,
+      "mean_shap": 0.018049,
+      "std_shap": 0.33497,
+      "max_shap": 2.418605,
+      "min_shap": -1.697923
+    },
+    {
+      "rank": 9,
+      "feature": "num_entries",
+      "label": "Access entries",
+      "encoded_columns": 1,
+      "mean_abs_shap": 0.219179,
+      "mean_shap": 0.003105,
+      "std_shap": 0.257629,
+      "max_shap": 2.29093,
+      "min_shap": -0.753244
+    },
+    {
+      "rank": 10,
+      "feature": "is_contractor",
+      "label": "Contractor",
+      "encoded_columns": 1,
+      "mean_abs_shap": 0.205984,
+      "mean_shap": 0.002626,
+      "std_shap": 0.319924,
+      "max_shap": 0.378183,
+      "min_shap": -1.845545
+    },
+    {
+      "rank": 11,
+      "feature": "num_unique_campus",
+      "label": "Unique campuses",
+      "encoded_columns": 1,
+      "mean_abs_shap": 0.173865,
+      "mean_shap": -0.000709,
+      "std_shap": 0.245075,
+      "max_shap": 2.665317,
+      "min_shap": -0.552938
+    },
+    {
+      "rank": 12,
+      "feature": "has_criminal_record",
+      "label": "Criminal record",
+      "encoded_columns": 1,
+      "mean_abs_shap": 0.16525,
+      "mean_shap": -0.000743,
+      "std_shap": 0.412477,
+      "max_shap": 0.657113,
+      "min_shap": -3.202583
+    },
+    {
+      "rank": 13,
+      "feature": "num_printed_pages_off_hours",
+      "label": "Off-hours pages",
+      "encoded_columns": 1,
+      "mean_abs_shap": 0.098052,
+      "mean_shap": -0.007306,
+      "std_shap": 0.324653,
+      "max_shap": 5.305256,
+      "min_shap": -0.630671
+    },
+    {
+      "rank": 14,
+      "feature": "has_foreign_citizenship",
+      "label": "Foreign citizenship",
+      "encoded_columns": 1,
+      "mean_abs_shap": 0.07366,
+      "mean_shap": -0.000878,
+      "std_shap": 0.132201,
+      "max_shap": 1.225116,
+      "min_shap": -0.346263
+    },
+    {
+      "rank": 15,
+      "feature": "has_medical_history",
+      "label": "Medical history",
+      "encoded_columns": 1,
+      "mean_abs_shap": 0.047859,
+      "mean_shap": 0.000773,
+      "std_shap": 0.0858,
+      "max_shap": 0.765671,
+      "min_shap": -0.614584
+    },
+    {
+      "rank": 16,
+      "feature": "entry_during_weekend",
+      "label": "Weekend entry",
+      "encoded_columns": 1,
+      "mean_abs_shap": 0.04232,
+      "mean_shap": -0.001142,
+      "std_shap": 0.106192,
+      "max_shap": 1.236878,
+      "min_shap": -0.420672
+    },
+    {
+      "rank": 17,
+      "feature": "is_abroad",
+      "label": "Currently abroad",
+      "encoded_columns": 1,
+      "mean_abs_shap": 0.028991,
+      "mean_shap": 0.00411,
+      "std_shap": 0.090214,
+      "max_shap": 1.198454,
+      "min_shap": -0.455138
+    },
+    {
+      "rank": 18,
+      "feature": "burned_from_other",
+      "label": "Burned (other user)",
+      "encoded_columns": 1,
+      "mean_abs_shap": 0.019357,
+      "mean_shap": -0.001148,
+      "std_shap": 0.106081,
+      "max_shap": 2.535065,
+      "min_shap": -0.061174
+    },
+    {
+      "rank": 19,
+      "feature": "trip_day_number",
+      "label": "Trip day no.",
+      "encoded_columns": 1,
+      "mean_abs_shap": 0.017073,
+      "mean_shap": -0.002573,
+      "std_shap": 0.048652,
+      "max_shap": 0.686413,
+      "min_shap": -0.431011
+    },
+    {
+      "rank": 20,
+      "feature": "hostility_country_level",
+      "label": "Hostility level",
+      "encoded_columns": 1,
+      "mean_abs_shap": 0.0162,
+      "mean_shap": -0.001313,
+      "std_shap": 0.14417,
+      "max_shap": 3.83254,
+      "min_shap": -0.040601
+    }
+  ]
+}
